@@ -1,0 +1,11 @@
+# Development artifacts (root-level only)
+/.beads/
+/.claude/
+/AGENTS.md
+/typescript
+
+# OS
+.DS_Store
+
+# Temp files from test runs
+/tmp/
