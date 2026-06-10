@@ -25,18 +25,24 @@ All paths below use `{{agent_dir}}` as a placeholder — discovery (Step 1) reso
 ├── bash-best-practices.md           # Shell command guidelines (referenced in context file)
 ├── commands/
 │   ├── dev.md                       # /dev — start dev servers
-│   ├── plan_w_team.md                # /plan_w_team — create a spec/implementation plan
+│   ├── plan_w_team.md                # /plan_w_team — create a spec/implementation plan (+ adversarial review)
 │   ├── build.md                     # /build — pre-flight check then execute a plan
-│   ├── review.md                    # /review — parallel domain-specialist code review
+│   ├── ship.md                      # /ship — archive plan, push, open draft PR (plan_build)
+│   ├── finish.md                    # /finish — complete a branch: merge/PR/keep/discard (plan_build)
+│   ├── team_review.md               # /team_review — validated domain-specialist review (review feature)
+│   ├── fix.md                       # /fix — apply Dev-Decision-marked findings from a /team_review report
+│   ├── quickfix.md                  # /quickfix — light-tier gated TDD fix (light_tier feature)
 │   ├── verify-browser.md            # /verify-browser — playwright-cli UI verification
 │   ├── test.md                      # /test — run test suite with reporting
-│   ├── audit-docs.md                # /audit-docs — documentation health check
-│   └── fix.md                       # /fix — apply Must Fix items from /review output (requires review feature)
+│   └── audit-docs.md                # /audit-docs — documentation health check
+├── scripts/
+│   └── wait-for-copilot.sh          # PR review poll (github_flow feature)
 ├── agents/
 │   └── team/
-│       ├── builder.md               # Focused coding agent with hook-based validation
-│       ├── validator.md             # Read-only verification agent
+│       ├── builder.md               # TDD coding agent with hook-based validation
+│       ├── validator.md             # Verification agent (plan-gated E2E spec capture)
 │       ├── questioner.md            # Naive questions — fresh eyes, no domain expertise
+│       ├── plan-adversary.md        # Eight-lens plan gap analysis (plan_adversary feature)
 │       ├── reviewer-security.md     # Always authored — cross-cutting security pass
 │       └── reviewer-<domain>.md     # Authored — 2–4 project-specific domain specialists
 ├── hooks/
@@ -222,9 +228,11 @@ To understand or customize the generated files, see the supporting references: `
 
 **Step 1.7: Deep Discovery** (`01a-deep-discovery.md`)
 
-Perform deep codebase analysis beyond tooling detection. Reads actual source files to understand architecture, patterns, module boundaries, data flows, and conventions. Three phases: structure scan, deep per-module analysis, and question generation (presenting uncertainties to the user for clarification).
+Perform deep codebase analysis beyond tooling detection. Reads actual source files to understand architecture, patterns, module boundaries, data flows, and conventions. Phases: preflight sizing + activity/era scan, structure scan with boundary detection (including the legacy-codebase recipe), batched per-module deep analysis dispatched to subagents, and question generation (max 12 presented per session; the rest deferred).
 
-Output: structured JSON artifacts in `{{agent_dir}}/discovery/` (`context.json`, `modules.json`, `questions.json`, `history.json`). These artifacts feed into Step 1.8.
+Output: structured JSON artifacts in `{{agent_dir}}/discovery/` (`context.json`, `modules.json`, `questions.json`, `history.json`, `run-state.json`, `raw/` caches). These artifacts feed into Step 1.8.
+
+**Large codebases:** discovery is checkpointed after every batch and resumable. If the preflight estimates more batches than fit one session, run what fits, then continue in fresh conversations with _"run `/discovery --resume`"_ until `run-state.json` shows `completed: true` — only then proceed to Step 1.8. A multi-session first run is normal for big legacy codebases, not a failure.
 
 **Step 1.8: Document Generation** (`01b-document-generation.md`)
 
@@ -250,7 +258,7 @@ Create the project context file (`CONTEXT.md` / `CLAUDE.md`), the `bash-best-pra
 
 **Step 3: Slash Commands** (`03-commands.md`)
 
-Create command files for each enabled feature: `/dev`, `/plan_w_team`, `/build`, `/review`, `/fix`, `/verify-browser`, `/test`, `/audit-docs`. Each command has frontmatter (description, model override, tool restrictions) and a step-by-step instruction body.
+Create command files for each enabled feature: `/dev`, `/plan_w_team`, `/build`, `/ship`, `/finish`, `/team_review`, `/fix`, `/quickfix`, `/verify-browser`, `/test`, `/audit-docs`. Each command has frontmatter (description, model override, tool restrictions) and a step-by-step instruction body.
 
 **End of Conversation 3:** Update `.setup-progress.json`, then tell the user:
 

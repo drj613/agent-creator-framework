@@ -12,45 +12,64 @@ This repository contains a generator framework that automates that setup. Copy `
 
 | Component | Purpose |
 |-----------|---------|
-| **Slash commands** | `/dev`, `/plan_w_team`, `/build`, `/review`, `/fix`, `/verify-browser`, `/test`, `/audit-docs`; `/discovery` and `/document` when `deep_discovery` is enabled |
-| **Agent team** | Builder (writes code, auto-validated by hooks), Validator (read-only, checks intent + tests), Questioner (naive questions, fresh eyes), and project-specific domain reviewers (security always present; 2–4 others authored from the discovered stack) |
+| **Slash commands** | `/dev`, `/plan_w_team`, `/build`, `/ship`, `/finish`, `/team_review`, `/fix`, `/quickfix`, `/verify-browser`, `/test`, `/audit-docs`; `/discovery` and `/document` when `deep_discovery` is enabled |
+| **Agent team** | Builder (TDD red-green-refactor, auto-validated by hooks), Validator (checks acceptance criteria + tests; saves E2E specs only when a plan enables it), Questioner (naive questions, fresh eyes), Plan Adversary (eight-lens gap analysis of every plan before execution), and project-specific domain reviewers (security always present; 2–4 others authored from the discovered stack) |
+| **Two-tier workflow** | Heavy tier for work with open design decisions (`/plan_w_team → /build → /ship → /team_review → /fix → /finish`); light tier for forced fixes (`/quickfix`, with a gate that verifies the change qualifies and an escalation valve back to the heavy tier) |
+| **Validated review** | `/team_review` runs parallel specialists, then **validates every finding against the checked-out code** before it reaches the report; the dev marks each finding fix/defer/dismiss and `/fix` applies only the chosen ones |
+| **Issue tracking** _(optional, `beads_tickets`)_ | Beads (`br`) tickets woven through the lifecycle — plans create tickets, builds update them, `/ship` warns on open ones |
+| **GitHub PR flow** _(optional, `github_flow`)_ | `/ship` opens draft PRs; `/team_review` cross-references PR review comments (e.g. Copilot); `/fix` posts inline resolution replies |
 | **PostToolUse hooks** | Auto-lint and type-check every file write; env check on session start; doc staleness warning on commit |
 | **Rules** | Commit workflow (docs before code) and documentation discipline (permanent vs temporary docs) |
 | **Skills** | Onboarding flow that installs deps, runs tests, starts servers, offers a code walkthrough |
 | **Doc structure** | `docs/` with permanent files, `specs/` for plans, staleness detection, and audit tooling |
-| **Deep discovery** _(optional)_ | `/discovery` analyzes source code to produce structured JSON artifacts (architecture, module boundaries, patterns); `/document` generates `docs/modules/<module>.md` files with YAML frontmatter and a routing table (`docs/modules/ROUTING.md`) that directs agents to the right module doc before planning changes. Staleness is tracked via git commit counts against each module's `source_paths`. |
+| **Deep discovery** _(optional)_ | Batched, checkpointed, resumable codebase analysis built to survive giant legacy monoliths: legacy-aware module boundary detection, git-churn activity classes (hot/warm/cold) driving doc depth, framework-era detection with "do not imitate" warnings, and an evidence rule — every behavioral claim in a module doc carries a `path:line` citation or is demoted to an open question. `/document` generates `docs/modules/<module>.md` plus a routing table; `/audit-docs` decays each doc's confidence by code drift. |
 
-All components are optional — discovery asks which features to enable and skips the rest. Some features have dependencies (`audit_docs` requires `documentation_structure`).
+All components are optional — discovery asks which features to enable and skips the rest. Some features have dependencies (`audit_docs` requires `documentation_structure`; `plan_adversary` and `light_tier` require `plan_build`).
 
 ---
 
 ## The Workflow It Produces
 
-Once setup is complete, the development cycle looks like this:
+Once setup is complete, the first question for any change is the **tier decision rule**: open decisions to make → heavy tier; forced fix with no decisions → light tier.
+
+**Heavy tier** — features and anything with design decisions:
 
 ```
-/plan_w_team "add user authentication"     # Analyze codebase, save spec to specs/
+/plan_w_team "add user authentication"     # Analyze codebase, save spec, adversarial review, tickets
   ↓
-  review and edit the spec
+  review and annotate the spec
   ↓
-/build specs/add-user-auth.md              # Pre-flight check, dispatch builder + validator agents
+/build specs/add-user-auth.md              # Pre-flight check, dispatch TDD builders + validator
   ↓
-  builder writes code (auto-linted by hooks on every save)
-  validator checks acceptance criteria + runs tests
+  builder writes code red-green-refactor (auto-linted by hooks on every save)
+  spec-compliance review per task; validator checks acceptance criteria + tests
   ↓
-/review                                    # parallel domain specialists (auto-discovered via glob)
+/ship specs/add-user-auth.md               # Archive plan, push, open draft PR
   ↓
-/fix                                       # auto-apply Must Fix findings from /review
+/team_review                               # parallel specialists; every finding validated against the repo
   ↓
-/test                                      # Run test suite, structured report
+  mark each finding fix / defer / dismiss
   ↓
-  commit (docs updated before code, enforced by rules)
+/fix .reviews/<report>.md                  # apply fix-marked findings, reply on PR threads
+  ↓
+/finish                                    # merge / flip PR ready / keep / discard
 ```
+
+**Light tier** — small, decision-free fixes:
+
+```
+/quickfix "users can't reset password"     # Tier gate → ticket → one TDD builder → commit
+  ↓
+/finish → /team_review --light → /fix      # proportionate review: one domain reviewer + questioner
+```
+
+If `/quickfix` hits an open decision mid-fix, it stops, commits the failing test, and escalates to `/plan_w_team` — the test carries forward as the plan's first requirement.
 
 Other commands fill in around this cycle:
 
 - `/dev` starts backend + frontend servers in the background
 - `/verify-browser` uses `playwright-cli` to walk through recent UI changes
+- `/test` runs the test suite with a structured report
 - `/audit-docs` detects stale docs, orphaned specs, and doc drift from the codebase
 
 ---
@@ -62,8 +81,10 @@ Before running setup, confirm you have:
 - Claude Code
 - `bash` 3.2+ — the macOS system default is sufficient; all scripts are compatible with bash 3.2
 - `jq` — required for hook JSON I/O and the generator. On macOS: `brew install jq`; on Linux: `apt-get install jq`
-- `git` — required for doc audit co-change analysis
-- **Models:** Opus-class for planning (`/plan_w_team`), Sonnet-class for building and validation. The framework's model tier system configures this automatically during discovery.
+- `git` — required for doc audit co-change analysis and discovery's activity/era classification
+- [plannotator](https://github.com/plannotator/plannotator) — the plan/report annotation UI used by `/plan_w_team` and `/team_review` (Dev Decision marking)
+- **Optional:** [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`) for the `beads_tickets` feature; `gh` CLI (authenticated) for the `github_flow` feature — the questionnaire auto-detects both
+- **Models:** Opus-class for planning, adversarial review, and discovery orchestration; Sonnet-class for building, validation, and per-module discovery analysis. The framework's model tier system configures this automatically during discovery.
 
 ---
 
@@ -125,7 +146,7 @@ Setup runs in two distinct phases with different mechanics.
 
 **Phase 1 — Generator** (`framework/generator/generate.sh`)
 
-Reads the discovery JSON produced during setup and outputs deterministic files: one hook script per linter and type-checker, `check-env.sh`, `audit-docs-hook.sh`, `audit-docs.sh`, `builder.md`, `validator.md`, `questioner.md`, and the directory scaffolding. This phase makes no judgment calls — the same discovery JSON always produces the same output, and you can reproduce it by re-running the generator. Correctness here (file paths, platform-appropriate frontmatter, per-tool configuration) is guaranteed by the script, not by the model.
+Reads the discovery JSON produced during setup and outputs deterministic files: one hook script per linter and type-checker, `check-env.sh`, `audit-docs-hook.sh`, `audit-docs.sh`, `builder.md`, `validator.md`, `questioner.md`, `plan-adversary.md` (when enabled), `scripts/wait-for-copilot.sh` (when `github_flow` is enabled), and the directory scaffolding. This phase makes no judgment calls — the same discovery JSON always produces the same output, and you can reproduce it by re-running the generator. Correctness here (file paths, platform-appropriate frontmatter, per-tool configuration) is guaranteed by the script, not by the model.
 
 **Phase 2 — Agent authoring**
 
@@ -163,11 +184,12 @@ agent-workflow-creator/
         ├── generators/
         │   ├── validators.sh          # Hook validator scripts (one per linter/type-checker)
         │   ├── hooks.sh               # check-env.sh, audit-docs-hook.sh, audit-docs.sh
-        │   ├── agents.sh              # builder.md + validator.md + questioner.md
+        │   ├── agents.sh              # builder.md + validator.md + questioner.md + plan-adversary.md
         │   └── gitignore.sh           # .gitignore entries for validator logs
         └── templates/                 # Starter templates for prose-heavy generated files
             ├── README.md              # Template index and usage guide
-            ├── commands/              # /dev, /plan_w_team, /build, /review, /fix, /verify-browser, /test, /audit-docs, /discovery, /document
+            ├── commands/              # /dev, /plan_w_team, /build, /ship, /finish, /team_review, /fix, /quickfix, /verify-browser, /test, /audit-docs, /discovery, /document
+            ├── scripts/               # wait-for-copilot.sh (PR review poll, github_flow only)
             ├── context/               # CLAUDE.md context file template
             ├── rules/                 # commit-workflow.md, documentation-rules.md
             └── skills/onboard/        # SKILL.md onboarding template
@@ -178,9 +200,11 @@ agent-workflow-creator/
 ## Key Design Decisions
 
 - **Plan/build separation** creates a reviewable artifact between design and execution — you can edit the spec before anything runs
+- **Adversarial plan review** — every plan is stress-tested through eight lenses (open decisions, cross-layer contracts, failure modes, blast radius, …) before tickets are created, the cheapest point to catch a gap
+- **Two tiers, one gate** — a sanctioned light path for forced fixes prevents workflow erosion; the gate is auditable and escalation back to planning is cheap and blameless
 - **Hooks block, not log** — if a linter fails, the builder must fix it before continuing; this changes agent behavior in practice, not just in theory
-- **Parallel review specialists** each read the full diff with undivided attention on one dimension (security, architecture, test coverage), then a synthesis pass deduplicates findings
-- **Validator can't write files** — enforced via `disallowedTools`, not instructions; a hard constraint, not a suggestion
+- **Parallel review specialists, validated findings** — each specialist reads the full diff with undivided attention on one dimension; then every finding is verified against the checked-out code before it reaches the report, because multi-agent review's top failure mode is confident unverified findings
+- **Evidence-cited docs** — generated module docs may only assert what they can cite (`path:line`); everything else becomes an open question instead of plausible-sounding filler
 - **Single retry limit on build errors** — one retry catches transient issues; beyond that, human judgment is needed
 
 Full rationale in [`framework/DESIGN.md`](framework/DESIGN.md).
@@ -191,7 +215,7 @@ Full rationale in [`framework/DESIGN.md`](framework/DESIGN.md).
 
 The framework is designed to be forked and extended:
 
-- **Add review specialists** — create additional `reviewer-<domain>.md` files in `{{agent_dir}}/agents/team/`; the `/review` command picks them up automatically
+- **Add review specialists** — create additional `reviewer-<domain>.md` files in `{{agent_dir}}/agents/team/`; the `/team_review` command picks them up automatically
 - **Add skills** — create `{{agent_dir}}/skills/<name>/SKILL.md` for domain-specific instruction sets (design system, API conventions, database patterns)
 - **Add agents** — create new `.md` files in `{{agent_dir}}/agents/team/` for specialized builders (e.g., `frontend-builder.md`, `migration-builder.md`)
 - **Adjust thresholds** — `audit-docs.sh` accepts `--days-high`, `--days-medium`, `--specs-max-age` flags
