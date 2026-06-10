@@ -88,14 +88,17 @@ A project WORKFLOW.md should open with this tier decision rule. Reference the pa
 **Template:** `framework/generator/templates/commands/discovery.md`
 **Feature gate:** `features.deep_discovery`
 
-Uses complex model tier (Opus-class) — requires architectural reasoning and pattern recognition. Arguments:
-- `--full` (default on first run): analyze entire codebase
-- `--incremental`: only re-analyze modules affected by changes since last run
+The orchestrator runs on the complex model tier (Opus-class); per-batch deep analysis is dispatched to subagents on the standard tier (Sonnet-class). Arguments:
+- `--full` (default on first run): analyze entire codebase — batched and checkpointed; large codebases span multiple sessions
+- `--incremental`: only re-analyze modules affected by changes since last run (refuses to run while a full run is incomplete)
 - `--module <name>`: re-analyze a single module
+- `--resume`: continue an interrupted run from `run-state.json` (failed batches first)
+- `--questions`: present the next batch of deferred questions (max 12/session), no analysis
+- `--max-batches <N>`: cap batches processed this session (default 5)
 
-Before running any analysis, the command verifies the feature is enabled by checking for `docs/modules/` or prior discovery artifacts.
+Key mechanics (full detail in `01a-deep-discovery.md`): preflight sizing + git-churn activity classes (hot/warm/cold) decide analysis depth and priority; boundary detection includes a legacy-codebase recipe for flat, structureless codebases; era detection tags modules whose patterns should not be imitated; every behavioral finding carries a `path:line` citation, validated by the orchestrator before merging.
 
-Output: JSON artifacts in `{{discovery.agent_dir}}/discovery/` that feed into `/document`.
+Output: JSON artifacts in `{{discovery.agent_dir}}/discovery/` (`context.json`, `modules.json`, `questions.json`, `history.json`, `run-state.json`, `raw/` caches) that feed into `/document`.
 
 ---
 
@@ -111,7 +114,9 @@ Arguments:
 - `--module <name>`: generate/update one module doc
 - `--update-routing`: only regenerate routing table and docs index
 
-Output: `docs/modules/<module>.md` files with YAML frontmatter, updates `docs/modules/ROUTING.md` with current routing table, updated docs index.
+Doc depth follows the module's activity class (deep / standard / inventory tiers). The **evidence rule** governs content: body claims are rendered only from cited `findings[]` (`path:line` inline); uncitable claims are demoted to Open Questions as "Unverified: …", and 5 citations per doc are spot-verified against the working tree. Old-era modules get a "do not imitate" callout. Full detail in `01b-document-generation.md`.
+
+Output: `docs/modules/<module>.md` files with YAML frontmatter (including `doc_depth`, `activity`, `era`), updates `docs/modules/ROUTING.md` (one row per module, Depth + Era columns), updated docs index.
 
 ---
 
