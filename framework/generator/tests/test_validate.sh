@@ -6,7 +6,6 @@ _GENERATOR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Minimal valid discovery JSON fixture
 _VALID_JSON='{
-  "platform": "claude-code",
   "agent_dir": ".claude",
   "context_filename": "CLAUDE.md",
   "context_file_location": "inside_agent_dir",
@@ -57,12 +56,12 @@ else
   fail "validate: accepts valid discovery JSON" "returned non-zero for valid input"
 fi
 
-# Test: missing .platform fails
-_json_no_platform="$(echo "$_VALID_JSON" | jq 'del(.platform)')"
-if _run_validate "$_json_no_platform"; then
-  fail "validate: rejects missing .platform" "should have failed but passed"
+# Test: missing .agent_dir fails
+_json_no_agent_dir="$(echo "$_VALID_JSON" | jq 'del(.agent_dir)')"
+if _run_validate "$_json_no_agent_dir"; then
+  fail "validate: rejects missing .agent_dir" "should have failed but passed"
 else
-  pass "validate: rejects missing .platform"
+  pass "validate: rejects missing .agent_dir"
 fi
 
 # Test: missing .test_runner.cmd fails

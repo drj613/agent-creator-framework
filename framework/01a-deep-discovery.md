@@ -450,12 +450,3 @@ During initial setup:
 
 The deep discovery step creates the `{{agent_dir}}/discovery/` directory if it doesn't exist.
 
----
-
-## OpenCode Adaptation
-
-When `{{discovery.platform}} == "opencode"`:
-
-- All discovery artifacts use `{{discovery.agent_dir}}/discovery/` (`.opencode/discovery/` for OpenCode)
-- The analysis methodology is identical across platforms — only the artifact path changes
-- The `/discovery` command template is platform-agnostic (read-only, no tool restrictions differ)

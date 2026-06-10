@@ -38,7 +38,7 @@ Different failure modes, different cost/benefit. A lint error in code the agent 
 The original framework assumed the setup agent would "read the codebase" ad hoc. A structured discovery phase produces a consistent context object, prevents missed detections, and makes all subsequent steps deterministic rather than dependent on agent judgment. Every file the setup agent creates references the same discovery output, so nothing is inferred twice or inferred differently.
 
 **Why ask model preferences abstractly (by tier, not by name)?**
-Model names change. Tiers do not. The framework docs reference tiers (complex / standard / simple); the generated files use concrete names the user provides during discovery. This means the framework stays current even as models rotate or new providers appear. It also supports OpenCode, Claude Code, and any future platform without framework changes.
+Model names change. Tiers do not. The framework docs reference tiers (complex / standard / simple); the generated files use concrete names the user provides during discovery. This means the framework stays current even as models rotate or new providers appear. It also supports new model providers without framework changes.
 
 **Why error recovery in `/build` has a single-retry limit?**
 LLMs are bad at diagnosing their own failures. One retry catches transient issues (timeout, flaky test, typo). Beyond that, the agent is likely to repeat the same mistake or compound the error. Unbounded retries waste tokens and can produce progressively worse output. Human judgment is needed for anything structural.
@@ -60,7 +60,7 @@ The original framework described this file with four brief bullet points, but it
 
 ---
 
-## Decisions Added in v3 (audit-docs Script + OpenCode Support)
+## Decisions Added in v3 (audit-docs Script)
 
 **Why extract audit-docs deterministic logic into a shell script?**
 The `/audit-docs` command mixed two concerns: data collection (git queries, pattern matching, file scans) and data interpretation (judging staleness, deciding fixes). The shell script handles collection and produces structured JSON. The LLM handles interpretation. This makes data collection reproducible, testable, and fast — one script invocation vs. dozens of sequential tool calls for git queries. The same script can also be used by CI pipelines without an LLM.
@@ -70,15 +70,6 @@ The deterministic operations (git queries, grep, find, jq) are all native shell 
 
 **Why does audit-docs.sh work on macOS bash 3.2?**
 The script uses `date -r <epoch>` (macOS/BSD) falling back to `date -d @<epoch>` (GNU/Linux) for epoch-to-date formatting, instead of the bash 4.2-only `printf '%(%Y-%m-%d)T'` builtin. All other constructs (arrays, process substitution, arithmetic) are compatible with bash 3.2, which macOS ships by default.
-
-**Why Option C (adaptation sections) for OpenCode support instead of variant files or inline conditionals?**
-Option A (inline conditionals) makes every paragraph fork into if/else, making files unreadable. Option B (variant files like `03-commands-claude.md` / `03-commands-opencode.md`) causes content duplication that drifts over time. Option C keeps one canonical flow (Claude Code-oriented, as the more feature-rich platform) with concentrated `## OpenCode Adaptation` sections at the end of each step file. The setup agent reads the main content, checks `{{discovery.platform}}`, and applies adaptations.
-
-**Why capability-based platform detection instead of name-based?**
-Checking `platform_capabilities.hook_mechanism == "typescript_plugin"` is more extensible than checking `platform == "opencode"`. If a third platform arrives with TypeScript hooks but different tool names, the capability flags handle it without rewriting conditional logic throughout the framework.
-
-**Why does the OpenCode TypeScript hook wrapper shell out to bash?**
-OpenCode requires TypeScript plugins for hooks, but shell scripts are preferred for validation logic. The TypeScript plugin is a thin event-routing wrapper (~10 lines) that delegates to the same bash validator scripts used by Claude Code. Validation logic lives in one place regardless of platform — only the event-routing layer differs.
 
 ---
 
@@ -104,13 +95,13 @@ When a file is written in a monorepo, the validator needs to determine which wor
 Two rounds of review found ~40 bugs in the pseudo-Handlebars template interpretation — the setup agent was generating hook scripts and agent YAML frontmatter from template markers like `{{#each discovery.linters}}`. These files are 100% deterministic given the discovery context: no prose judgment, no adaptive content. Moving them to a bash script that reads JSON and generates files via heredocs eliminates this entire class of bugs. The runtime (commands, hooks, agents in operation) is unchanged. Only the setup step changes.
 
 **Why multiple focused files instead of one monolith?**
-Each generator file is under 300 lines and handles one concern (validators, hooks, agents, OpenCode plugins, gitignore). This makes the scripts readable and testable in isolation. `generate.sh` is a thin orchestrator that sources the others and calls them in sequence.
+Each generator file is under 300 lines and handles one concern (validators, hooks, agents, gitignore). This makes the scripts readable and testable in isolation. `generate.sh` is a thin orchestrator that sources the others and calls them in sequence.
 
 **Why heredocs instead of separate template files?**
 Separate template files require their own escaping conventions and a template engine to execute them. Heredocs in bash are the template engine — variable interpolation is standard bash, no additional dependency. The generator's only external dependency is `jq` (already required by the hook scripts themselves).
 
 **What the agent still generates (prose-heavy, adaptive):**
-- Context file (CLAUDE.md / AGENTS.md) — project-specific prose
+- Context file (`CLAUDE.md`) — project-specific prose
 - `bash-best-practices.md` — referenced in context file
 - `WORKFLOW.md` — human-readable workflow guide
 - All command files — adaptive step-by-step instructions

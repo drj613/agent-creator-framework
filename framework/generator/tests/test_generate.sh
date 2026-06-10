@@ -7,7 +7,6 @@ _GENERATE="$_GENERATOR_ROOT/generate.sh"
 
 # Minimal valid single-package discovery JSON
 _BASE_JSON='{
-  "platform": "claude-code",
   "agent_dir": ".claude",
   "context_filename": "CLAUDE.md",
   "context_file_location": "inside_agent_dir",
@@ -39,7 +38,6 @@ _BASE_JSON='{
 
 # Monorepo fixture
 _MONOREPO_JSON='{
-  "platform": "claude-code",
   "agent_dir": ".claude",
   "context_filename": "CLAUDE.md",
   "context_file_location": "inside_agent_dir",
@@ -124,7 +122,7 @@ _run_generate_tests() {
   fi
 
   # Test: invalid JSON causes non-zero exit
-  printf '%s\n' '{"platform": "claude_code"}' > "$_tmpdir/invalid.json"
+  printf '%s\n' '{"agent_dir": ".claude"}' > "$_tmpdir/invalid.json"
   if bash "$_GENERATE" "$_tmpdir/invalid.json" --dry-run > /dev/null 2>&1; then
     fail "generate: rejects incomplete discovery JSON" "should have exited non-zero"
   else

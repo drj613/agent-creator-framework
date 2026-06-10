@@ -15,7 +15,7 @@ templates/
 │   ├── test.md         # /test — run tests and report
 │   └── audit-docs.md   # /audit-docs — documentation health check
 ├── context/
-│   └── CLAUDE.md       # Context file template → {{agent_dir}}/CLAUDE.md or AGENTS.md
+│   └── CLAUDE.md       # Context file template → {{agent_dir}}/CLAUDE.md
 ├── rules/
 │   ├── commit-workflow.md      # → {{agent_dir}}/rules/commit-workflow.md
 │   └── documentation-rules.md  # → {{agent_dir}}/rules/documentation-rules.md

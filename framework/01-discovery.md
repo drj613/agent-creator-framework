@@ -122,7 +122,7 @@ Check for:
 - `README.md`
 - `CHANGELOG.md`
 - `ARCHITECTURE.md` or `docs/ARCHITECTURE.md`
-- Any existing agent directories: `.opencode/`, `.agent/`, `.claude/`, `.cursor/`
+- Any existing agent directories: `.agent/`, `.claude/`, `.cursor/`
 
 Record what exists. Existing agent directories indicate a prior setup that may need merging or replacement.
 
@@ -184,13 +184,6 @@ Record all detected workspaces as a working list to present to the user in Phase
 ### 2.1 Always Ask
 
 These questions are mandatory regardless of what auto-detection found.
-
-**Agent Platform**
-
-> Which agent platform are you using?
-> - **Claude Code** — creates `.claude/` with `CLAUDE.md` inside it
-> - **OpenCode** — creates `.opencode/` with `AGENTS.md` at project root
-> - **Other** — specify directory and filename convention
 
 **Model Preferences**
 
@@ -303,11 +296,9 @@ Every field in the schema is annotated with its type and whether it is required 
 
 | Field Path | Type | Presence | Notes |
 |-----------|------|----------|-------|
-| `platform` | string | required | `"claude-code"`, `"opencode"`, or `"other"` |
-| `agent_dir` | string | required | e.g. `".claude"`, `".opencode"` |
-| `context_filename` | string | required | e.g. `"CLAUDE.md"`, `"AGENTS.md"` |
-| `context_file_location` | string | required | `"inside_agent_dir"` or `"project_root"` |
-| `platform_capabilities` | object | required | Derived from platform — all subfields required |
+| `agent_dir` | string | required | `.claude` |
+| `context_filename` | string | required | `"CLAUDE.md"` |
+| `context_file_location` | string | required | `"inside_agent_dir"` |
 | `project_type` | string | required | One of: `"monorepo"`, `"frontend-only"`, `"backend-only"`, `"full-stack"`, `"library"` |
 | `languages` | string[] | required | At least one entry |
 | `primary_language` | string | required | Must be in `languages` array |
@@ -334,7 +325,7 @@ Before proceeding to Step 2, validate the compiled context against these rules. 
 
 ```
 Required fields that must be non-null:
-  platform, agent_dir, context_filename, models.complex, models.standard, models.simple,
+  agent_dir, context_filename, models.complex, models.standard, models.simple,
   test_runner.cmd, project_type, primary_language, app_description
 
 Conditional requirements:
@@ -366,30 +357,9 @@ If all checks pass, present the context to the user for confirmation.
 DISCOVERY_CONTEXT:
 
   # --- Platform ---
-  platform: "claude-code" | "opencode" | "other"
-  agent_dir: ".claude" | ".opencode" | "<custom>"
-  context_filename: "CLAUDE.md" | "AGENTS.md" | "<custom>"
-  context_file_location: "inside_agent_dir" | "project_root"
-  # "inside_agent_dir" = file lives at agent_dir/context_filename (Claude Code)
-  # "project_root" = file lives at project root (OpenCode: AGENTS.md)
-
-  # --- Platform Capabilities ---
-  # Derived automatically from the platform choice. Not asked — computed.
-  platform_capabilities:
-    hook_mechanism: "yaml_frontmatter" | "typescript_plugin"
-    # "yaml_frontmatter" = hooks wired in agent .md frontmatter (Claude Code)
-    # "typescript_plugin" = hooks are .ts plugins in agent_dir/hooks/ (OpenCode)
-    tool_name_style: "PascalCase" | "lowercase"
-    # "PascalCase" = Write, Edit, Bash, Read, Glob, Grep (Claude Code)
-    # "lowercase" = write, edit, bash, read, grep, glob (OpenCode)
-    task_tools: "separate" | "unified"
-    # "separate" = TaskCreate, TaskUpdate, TaskList, TaskGet + Task (Claude Code)
-    # "unified" = todowrite/todoread for lists + task for subagent dispatch (OpenCode)
-    has_plan_mode_tool: true | false
-    # Claude Code has EnterPlanMode; OpenCode does not
-    tool_restriction_style: "denylist" | "allowlist"
-    # "denylist" = disallowedTools: Write, Edit (Claude Code)
-    # "allowlist" = tools: { write: false, edit: false } (OpenCode)
+  agent_dir: ".claude"
+  context_filename: "CLAUDE.md"
+  context_file_location: "inside_agent_dir"
 
   # --- Project ---
   project_type: "monorepo" | "frontend-only" | "backend-only" | "full-stack" | "library"
@@ -551,31 +521,3 @@ Present this context to the user for confirmation. Run the pre-generation valida
 
 Copy the `features` object from the discovery context into `features_enabled` as a quick-reference cache. Conversation 2's feature gate check (`{{discovery.features.deep_discovery}}`) can use `features_enabled` from the progress file instead of parsing the full discovery JSON.
 
----
-
-## OpenCode Adaptation
-
-When `platform == "opencode"`, apply these defaults automatically:
-
-```yaml
-agent_dir: ".opencode"
-context_filename: "AGENTS.md"
-context_file_location: "project_root"
-platform_capabilities:
-  hook_mechanism: "typescript_plugin"
-  tool_name_style: "lowercase"
-  task_tools: "unified"
-  has_plan_mode_tool: false
-  tool_restriction_style: "allowlist"
-```
-
-Key differences from Claude Code:
-- **Agent directory:** `.opencode/` is canonical, but OpenCode also reads `.claude/` and `.agents/` for compatibility.
-- **Context file:** `AGENTS.md` lives at the project root, NOT inside `.opencode/`. It serves as both the rules file and the project context file.
-- **Hook mechanism:** OpenCode uses TypeScript/JavaScript plugins (`.opencode/hooks/*.ts`) instead of YAML frontmatter wiring. Plugins subscribe to events like `tool.execute.before` and `tool.execute.after`.
-- **Tool names:** Lowercase (`write`, `edit`, `bash`, `read`, `grep`, `glob`, `task`, `todowrite`, `todoread`, `question`, `webfetch`, `websearch`, `skill`).
-- **Task management:** `todowrite`/`todoread` for task lists. `task` for subagent dispatch. No separate `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`.
-- **No `EnterPlanMode`:** OpenCode does not have a plan mode tool. The `/plan_w_team` command uses `disallowed-tools` on Claude Code but must use alternative restrictions on OpenCode.
-- **Tool restrictions:** OpenCode uses a `tools:` allowlist (`{ write: false, edit: false }`) instead of `disallowedTools` denylist. OpenCode also supports a `permission:` block for granular access control (`ask`/`allow`/`deny` per tool, with pattern matching for bash commands).
-
-All subsequent step files reference `platform_capabilities` for platform-dependent decisions rather than checking the platform name directly. This means a third platform with, say, TypeScript hooks but PascalCase tool names would work without restructuring the framework.

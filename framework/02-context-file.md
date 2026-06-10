@@ -17,16 +17,12 @@ This step produces three files:
 
 ### Purpose
 
-The context file is the first thing the agent reads in every session. It provides a compact overview of the project so the agent can work without rediscovering the codebase each time. On Claude Code, this is `CLAUDE.md` (inside `.claude/`); on OpenCode, this is `AGENTS.md` (at the project root).
+The context file is the first thing the agent reads in every session. It provides a compact overview of the project so the agent can work without rediscovering the codebase each time. This is `CLAUDE.md`, inside `.claude/`.
 
 ### Location
 
 ```
-{{#if discovery.context_file_location == "project_root"}}
-{{discovery.context_filename}}                    # At project root (e.g., AGENTS.md for OpenCode)
-{{else}}
-{{discovery.agent_dir}}/{{discovery.context_filename}}  # Inside agent dir (e.g., .claude/CLAUDE.md)
-{{/if}}
+{{discovery.agent_dir}}/{{discovery.context_filename}}  # e.g., .claude/CLAUDE.md
 ```
 
 ### How to Fill Each Section
@@ -1712,41 +1708,3 @@ Documentation must be updated **before** every commit, not after. The sequence:
 - **Frontend-only:** omit backend commands.
 - Only include sections for enabled features — conditionals in the template (the `{{#if}}` blocks) indicate which sections to include or omit.
 
----
-
-## OpenCode Adaptation
-
-> **Why a platform check here instead of a capability flag?** The adaptation sections use `{{discovery.platform}}` because they describe platform-specific structural differences (file locations, directory conventions) that cannot be expressed as a single capability flag. The main content above uses `{{discovery.platform_capabilities.*}}` for behavioral decisions (tool names, hook mechanisms). See `DESIGN.md` for the full rationale.
-
-When `{{discovery.platform}} == "opencode"`:
-
-### Context File Location
-
-The context file is `AGENTS.md` at the **project root**, NOT inside `{{discovery.agent_dir}}`. OpenCode reads `AGENTS.md` from the project root as its primary rules/context file.
-
-```
-# Claude Code
-.claude/CLAUDE.md
-
-# OpenCode
-AGENTS.md          ← project root, not inside .opencode/
-```
-
-The `{{discovery.context_file_location}}` field in the discovery context controls this:
-- `"inside_agent_dir"` → `{{discovery.agent_dir}}/{{discovery.context_filename}}`
-- `"project_root"` → `{{discovery.context_filename}}` (at project root)
-
-### Bash Best Practices Reference
-
-The `bash-best-practices.md` file still lives inside `{{discovery.agent_dir}}/` regardless of platform. The reference link in the context file should use the correct relative path:
-
-```markdown
-> Shell command reference: `{{discovery.agent_dir}}/bash-best-practices.md`
-```
-
-### Content Differences
-
-The context file content (project overview, commands, architecture, patterns, testing, commit workflow, documentation) is identical across platforms. Only the filename, location, and internal references to tool names differ:
-
-- Replace PascalCase tool references with lowercase if present in any instructions within the context file
-- Path references to `{{discovery.agent_dir}}/rules/`, `{{discovery.agent_dir}}/commands/`, etc. remain the same since both platforms use the agent dir for these

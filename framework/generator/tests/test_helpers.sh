@@ -5,7 +5,6 @@
 _GENERATOR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 _MINIMAL_JSON='{
-  "platform": "claude-code",
   "agent_dir": ".claude",
   "context_filename": "CLAUDE.md",
   "directories": { "backend_lang": "python", "frontend_lang": "typescript", "backend_root": "backend", "frontend_root": "frontend" },

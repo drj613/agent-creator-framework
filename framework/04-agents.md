@@ -261,7 +261,6 @@ Issues Found: [list or "none"]
 See `orchestration-reference.md` for TaskGet and other tool documentation.
 ````
 
-> **OpenCode adaptation:** In the instruction body, replace tool names: `TaskGet` → `todoread`, `disallowedTools: Write, Edit` → `tools: { write: false, edit: false }`. The generator handles this automatically — this note is for manual customization only.
 
 The intent verification closes the gap between "it compiles" and "it does what was asked." Tests verify code behavior; acceptance criteria verify intent.
 
@@ -411,75 +410,3 @@ disallowedTools: Write, Edit, Bash, Task
 
 The questioner is generated automatically by `generate.sh`. No authoring needed.
 
----
-
-## OpenCode Adaptation
-
-When `{{discovery.platform_capabilities.hook_mechanism}} == "typescript_plugin"` (i.e. OpenCode), apply these changes to agent definitions.
-
-### Builder Frontmatter
-
-OpenCode does not use `hooks:` in agent frontmatter. Instead, hooks are TypeScript plugins in `{{discovery.agent_dir}}/hooks/` (see Step 5). The builder agent uses `tools:` and `permission:` blocks instead:
-
-```yaml
----
-name: builder
-description: Executes a single assigned task — writes code, runs tests, marks complete
-model: {{discovery.models.standard}}
-color: cyan
-tools:
-  write: true
-  edit: true
-  bash: true
-  read: true
-  grep: true
-  glob: true
-  task: false
-  todowrite: true
-  todoread: true
-permission:
-  bash:
-    allow:
-      - "{{discovery.test_runner.cmd}}*"
-{{#if discovery.linters}}
-      - "{{discovery.linters[0].cmd | split(' ') | first}}*"
-{{/if}}
-{{#if discovery.type_checkers}}
-      - "{{discovery.type_checkers[0].cmd | split(' ') | first}}*"
-{{/if}}
----
-```
-
-Hook-based validation is wired through the TypeScript plugin (see Step 5, OpenCode Adaptation section) rather than per-agent YAML frontmatter.
-
-### Validator Frontmatter
-
-Replace `disallowedTools: Write, Edit` with the OpenCode `tools:` allowlist:
-
-```yaml
----
-name: validator
-description: Verifies a completed task — read-only, cannot modify files
-model: {{discovery.models.standard}}
-tools:
-  write: false
-  edit: false
-  bash: true
-  read: true
-  grep: true
-  glob: true
-  todowrite: true
-  todoread: true
----
-```
-
-### Tool Name References
-
-In the builder and validator instruction bodies, replace all tool references:
-
-- `TaskGet` → `todoread` (by ID)
-- `TaskUpdate` → `todowrite` (update mode)
-- `TaskList` → `todoread`
-- `TaskCreate` → `todowrite`
-
-The report format sections remain the same — only tool invocation names change.

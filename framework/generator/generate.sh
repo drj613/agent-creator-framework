@@ -66,8 +66,6 @@ source "$SCRIPT_DIR/generators/validators.sh"
 source "$SCRIPT_DIR/generators/hooks.sh"
 # shellcheck source=generators/agents.sh
 source "$SCRIPT_DIR/generators/agents.sh"
-# shellcheck source=generators/opencode.sh
-source "$SCRIPT_DIR/generators/opencode.sh"
 # shellcheck source=generators/gitignore.sh
 source "$SCRIPT_DIR/generators/gitignore.sh"
 
@@ -106,12 +104,6 @@ fi
 generate_validators
 generate_hooks
 generate_agents
-
-platform="$(jq -r '.platform_capabilities.hook_mechanism // empty' <<< "$DISCOVERY_JSON")"
-if [[ "$platform" == "typescript_plugin" ]]; then
-  generate_opencode_plugins
-fi
-
 generate_gitignore_entries
 
 # --- Validate output ---

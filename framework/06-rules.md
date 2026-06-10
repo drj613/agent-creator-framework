@@ -150,12 +150,3 @@ Governs how documentation is maintained. Prevents doc sprawl.
    - Sections wrapped in `<!-- human-maintained -->` / `<!-- /human-maintained -->` tags are preserved during automated regeneration — use these tags to protect hand-written content.
 {{/if}}
 
----
-
-## OpenCode Adaptation
-
-When `{{discovery.platform}} == "opencode"`:
-
-- Rule file content is identical across platforms — rules are platform-agnostic instructions.
-- File paths use `{{discovery.agent_dir}}/rules/` (`.opencode/rules/` for OpenCode).
-- The context file reference changes from `.claude/CLAUDE.md` to `AGENTS.md` at the project root, but the rules themselves reference `docs/` and `CHANGELOG.md` which are always at the project root regardless of platform.

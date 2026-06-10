@@ -15,18 +15,10 @@ generate_agents() {
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-# Return tool names for the body based on tool_name_style
-# Usage: _tool_name <PascalCase_name> <lowercase_name>
+# Return the canonical (Claude Code) tool name for the body
+# Usage: _tool_name <PascalCase_name>
 _tool_name() {
-  local pascal="$1"
-  local lower="$2"
-  local style
-  style="$(jq_read '.platform_capabilities.tool_name_style')"
-  if [[ "$style" == "lowercase" ]]; then
-    echo "$lower"
-  else
-    echo "$pascal"
-  fi
+  echo "$1"
 }
 
 # Build the PostToolUse hooks list for the builder body
@@ -144,58 +136,6 @@ ${bash_hook_yaml}"
   printf '%s\n' "$frontmatter"
 }
 
-_builder_frontmatter_opencode() {
-  local model test_cmd
-  model="$(jq_read '.models.standard')"
-  test_cmd="$(jq_read '.test_runner.cmd')"
-
-  local allow_lines
-  allow_lines="      - \"${test_cmd}*\""
-
-  local linter_count type_checker_count
-  linter_count="$(jq '.linters | length' <<< "$DISCOVERY_JSON")"
-  type_checker_count="$(jq '.type_checkers | length' <<< "$DISCOVERY_JSON")"
-
-  if (( linter_count > 0 )); then
-    local linter_cmd
-    linter_cmd="$(jq_read '.linters[0].cmd')"
-    # Extract just the base command (first word)
-    local base_cmd="${linter_cmd%% *}"
-    allow_lines+=$'\n'"      - \"${base_cmd}*\""
-  fi
-  if (( type_checker_count > 0 )); then
-    local tc_cmd
-    tc_cmd="$(jq_read '.type_checkers[0].cmd')"
-    local base_cmd="${tc_cmd%% *}"
-    allow_lines+=$'\n'"      - \"${base_cmd}*\""
-  fi
-
-  # $model and $test_cmd are pre-validated by validate.sh to exclude shell metacharacters.
-  # The unquoted heredoc is intentional — these values are safe to interpolate.
-  cat <<YAML
----
-name: builder
-description: Executes a single assigned task — writes code, runs tests, marks complete
-model: ${model}
-color: cyan
-tools:
-  write: true
-  edit: true
-  bash: true
-  read: true
-  grep: true
-  glob: true
-  task: false
-  todowrite: true
-  todoread: true
-permission:
-  bash:
-    allow:
-${allow_lines}
----
-YAML
-}
-
 # ---------------------------------------------------------------------------
 # Validator frontmatter builders
 # ---------------------------------------------------------------------------
@@ -209,27 +149,6 @@ name: validator
 description: Verifies a completed task — read-only, cannot modify files
 model: ${model}
 disallowedTools: Write, Edit
----
-YAML
-}
-
-_validator_frontmatter_opencode() {
-  local model
-  model="$(jq_read '.models.standard')"
-  cat <<YAML
----
-name: validator
-description: Verifies a completed task — read-only, cannot modify files
-model: ${model}
-tools:
-  write: false
-  edit: false
-  bash: true
-  read: true
-  grep: true
-  glob: true
-  todowrite: true
-  todoread: true
 ---
 YAML
 }
@@ -423,24 +342,17 @@ _validator_report_checks_section() {
 
 generate_builder_md() {
   local agent_dir="$1"
-  local hook_mechanism
-  hook_mechanism="$(jq_read '.platform_capabilities.hook_mechanism')"
-
   local frontmatter
-  if [[ "$hook_mechanism" == "typescript_plugin" ]]; then
-    frontmatter="$(_builder_frontmatter_opencode)"
-  else
-    frontmatter="$(_builder_frontmatter_claude_code "$agent_dir")"
-  fi
+  frontmatter="$(_builder_frontmatter_claude_code "$agent_dir")"
 
   # Tool names for the body
   local t_taskget t_taskupdate t_taskcreate t_write t_edit t_bash t_todoread t_todowrite
-  t_taskget="$(_tool_name "TaskGet" "todoread")"
-  t_taskupdate="$(_tool_name "TaskUpdate" "todowrite")"
-  t_taskcreate="$(_tool_name "TaskCreate" "todowrite")"
-  t_write="$(_tool_name "Write" "write")"
-  t_edit="$(_tool_name "Edit" "edit")"
-  t_bash="$(_tool_name "Bash" "bash")"
+  t_taskget="$(_tool_name "TaskGet")"
+  t_taskupdate="$(_tool_name "TaskUpdate")"
+  t_taskcreate="$(_tool_name "TaskCreate")"
+  t_write="$(_tool_name "Write")"
+  t_edit="$(_tool_name "Edit")"
+  t_bash="$(_tool_name "Bash")"
 
   local test_cmd
   test_cmd="$(jq_read '.test_runner.cmd')"
@@ -535,22 +447,15 @@ Hook Validation: ${all_checkers} [pass/fail]
 
 generate_validator_md() {
   local agent_dir="$1"
-  local hook_mechanism
-  hook_mechanism="$(jq_read '.platform_capabilities.hook_mechanism')"
-
   local frontmatter
-  if [[ "$hook_mechanism" == "typescript_plugin" ]]; then
-    frontmatter="$(_validator_frontmatter_opencode)"
-  else
-    frontmatter="$(_validator_frontmatter_claude_code)"
-  fi
+  frontmatter="$(_validator_frontmatter_claude_code)"
 
   local test_cmd
   test_cmd="$(jq_read '.test_runner.cmd')"
 
   local t_bash t_taskget t_todoread
-  t_bash="$(_tool_name "Bash" "bash")"
-  t_taskget="$(_tool_name "TaskGet" "todoread")"
+  t_bash="$(_tool_name "Bash")"
+  t_taskget="$(_tool_name "TaskGet")"
 
   local automated_checks
   automated_checks="$(_validator_automated_checks)"
@@ -558,13 +463,8 @@ generate_validator_md() {
   local report_checks
   report_checks="$(_validator_report_checks_section)"
 
-  # Platform-appropriate enforcement text (just the tool restriction expression, no wrapping)
   local enforcement_tool_ref
-  if [[ "$hook_mechanism" == "typescript_plugin" ]]; then
-    enforcement_tool_ref="\`tools: { write: false, edit: false }\`"
-  else
-    enforcement_tool_ref="\`disallowedTools: Write, Edit\`"
-  fi
+  enforcement_tool_ref="\`disallowedTools: Write, Edit\`"
 
   local body
   body="# Validator
@@ -644,37 +544,10 @@ disallowedTools: Write, Edit, Bash, Task
 YAML
 }
 
-_questioner_frontmatter_opencode() {
-  local model
-  model="$(jq_read '.models.simple')"
-  cat <<YAML
----
-name: questioner
-description: Asks naive questions about code changes — fresh eyes, no domain expertise
-model: ${model}
-tools:
-  write: false
-  edit: false
-  bash: false
-  task: false
-  read: true
-  grep: true
-  glob: true
----
-YAML
-}
-
 generate_questioner_md() {
   local agent_dir="$1"
-  local hook_mechanism
-  hook_mechanism="$(jq_read '.platform_capabilities.hook_mechanism')"
-
   local frontmatter
-  if [[ "$hook_mechanism" == "typescript_plugin" ]]; then
-    frontmatter="$(_questioner_frontmatter_opencode)"
-  else
-    frontmatter="$(_questioner_frontmatter_claude_code)"
-  fi
+  frontmatter="$(_questioner_frontmatter_claude_code)"
 
   # shellcheck disable=SC2016  # single-quoted heredoc — $ intentionally unexpanded
   local body

@@ -61,7 +61,6 @@ validate_discovery_json() {
 
   # Required top-level fields
   local required_fields=(
-    ".platform"
     ".app_description"
     ".agent_dir"
     ".context_filename"
@@ -90,16 +89,6 @@ validate_discovery_json() {
   if [[ "$test_cmd_val" =~ [';''&''|''`''$''()''{}''<''>'] ]] || [[ "$test_cmd_val" == *$'\n'* ]]; then
     die ".test_runner.cmd contains unsafe shell characters: ${test_cmd_val}"
   fi
-
-  # Validate .platform value is one of the allowed set
-  local platform_val
-  platform_val="$(jq_read '.platform')"
-  local allowed_platforms=("claude-code" "opencode")
-  local platform_valid=false
-  for p in "${allowed_platforms[@]}"; do
-    [[ "$platform_val" == "$p" ]] && { platform_valid=true; break; }
-  done
-  [[ "$platform_valid" == "true" ]] || die ".platform must be one of: ${allowed_platforms[*]}. Got: ${platform_val}"
 
   # e) Validate agent_dir: safe path characters only, no path traversal
   local agent_dir_val

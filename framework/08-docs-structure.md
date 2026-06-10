@@ -177,12 +177,3 @@ When running `/audit-docs`, include a specs section in the output:
 
 After completing all setup steps, run `/audit-docs` immediately to assess the current state of any existing documentation. This establishes a baseline and surfaces any pre-existing issues before the workflow rules take effect.
 
----
-
-## OpenCode Adaptation
-
-When `{{discovery.platform}} == "opencode"`:
-
-- All file paths use `{{discovery.agent_dir}}` (`.opencode/`) — no structural differences in the docs directory itself.
-- The `audit-docs-hook.sh` script is platform-agnostic (pure bash + jq). On OpenCode, it is invoked by a TypeScript plugin wrapper (see Step 5) instead of YAML frontmatter hook wiring.
-- The `audit-docs.sh` script is fully platform-agnostic — invoked identically from the `/audit-docs` command on both platforms.

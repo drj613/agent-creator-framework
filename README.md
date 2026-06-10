@@ -4,7 +4,7 @@ Every project you start with an AI coding agent requires the same manual setup: 
 
 This repository contains a generator framework that automates that setup. Copy `framework/` into an existing project, tell your agent to run it, answer a few questions about your stack, and it produces a complete, tailored workflow — slash commands, subagents, validation hooks, documentation rules, and more.
 
-**`framework/` is a one-time scaffold. Delete it when setup is done.** The generated files live in your project's agent directory (`.claude/` or `.opencode/`); the framework is not needed afterward.
+**`framework/` is a one-time scaffold. Delete it when setup is done.** The generated files live in your project's agent directory (`.claude/`); the framework is not needed afterward.
 
 ---
 
@@ -55,20 +55,11 @@ Other commands fill in around this cycle:
 
 ---
 
-## Supported Platforms
-
-- **Claude Code** — `.claude/` directory with `CLAUDE.md`, YAML frontmatter hooks
-- **OpenCode** — `.opencode/` directory with `AGENTS.md` at project root, TypeScript plugin hooks
-
-Platform differences are abstracted through capability flags, not name checks. A third platform with its own hook mechanism would slot in without restructuring the framework.
-
----
-
 ## Requirements
 
 Before running setup, confirm you have:
 
-- An AI agent platform (Claude Code or OpenCode)
+- Claude Code
 - `bash` 3.2+ — the macOS system default is sufficient; all scripts are compatible with bash 3.2
 - `jq` — required for hook JSON I/O and the generator. On macOS: `brew install jq`; on Linux: `apt-get install jq`
 - `git` — required for doc audit co-change analysis
@@ -157,7 +148,7 @@ agent-workflow-creator/
     ├── 02-context-file.md             # Project context file + bash best practices reference
     ├── 03-commands.md                 # Slash command definitions
     ├── 04-agents.md                   # Builder/validator architecture + customization guide
-    ├── 05-hooks.md                    # Hook I/O contract, validator template, OpenCode wrappers
+    ├── 05-hooks.md                    # Hook I/O contract, validator template
     ├── 06-rules.md                    # Commit workflow and documentation rules
     ├── 07-skills.md                   # Onboarding skill + skill creation guide
     ├── 08-docs-structure.md           # docs/ structure, specs/ lifecycle, staleness heuristics
@@ -173,12 +164,11 @@ agent-workflow-creator/
         │   ├── validators.sh          # Hook validator scripts (one per linter/type-checker)
         │   ├── hooks.sh               # check-env.sh, audit-docs-hook.sh, audit-docs.sh
         │   ├── agents.sh              # builder.md + validator.md + questioner.md
-        │   ├── opencode.sh            # TypeScript plugin wrappers (OpenCode only)
         │   └── gitignore.sh           # .gitignore entries for validator logs
         └── templates/                 # Starter templates for prose-heavy generated files
             ├── README.md              # Template index and usage guide
             ├── commands/              # /dev, /plan_w_team, /build, /review, /fix, /verify-browser, /test, /audit-docs, /discovery, /document
-            ├── context/               # CLAUDE.md / AGENTS.md context file template
+            ├── context/               # CLAUDE.md context file template
             ├── rules/                 # commit-workflow.md, documentation-rules.md
             └── skills/onboard/        # SKILL.md onboarding template
 ```
@@ -212,8 +202,7 @@ The framework is designed to be forked and extended:
 
 To remove what the generator created from your project:
 
-- Delete the agent directory (`{{agent_dir}}/` — typically `.claude/` or `.opencode/`)
-- For OpenCode: also delete `AGENTS.md` from the project root
+- Delete the agent directory (`{{agent_dir}}/` — `.claude/`)
 - Delete `WORKFLOW.md` and `CHANGELOG.md` from the project root (if created by the framework)
 - Delete `docs/` and `specs/` directories (if created by the framework — check git blame to verify)
 - Remove any `.gitignore` entries added for hook log files
@@ -223,4 +212,3 @@ To remove what the generator created from your project:
 ## Known Limitations
 
 - **Monorepo support is partial** — discovery detects monorepos and classifies them; `deep_discovery` includes workspace-aware module scoping (per-workspace boundaries, cross-workspace dependency tracking). However, hook path derivation, per-package agent directories, and multi-language root handling still require manual adjustment after setup
-- **OpenCode support is secondary** — the framework generates functional OpenCode configurations, but adaptation sections cover frontmatter changes rather than complete adapted command bodies; Claude Code is the primary, fully-tested platform

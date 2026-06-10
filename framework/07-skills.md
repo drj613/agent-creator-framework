@@ -180,35 +180,3 @@ To add more skills for the project, create a new directory under `{{discovery.ag
 
 Each skill should be self-contained — when loaded, it provides everything the agent needs to work in that domain without referencing external docs.
 
----
-
-## OpenCode Adaptation
-
-When `{{discovery.platform}} == "opencode"`:
-
-### Skill Frontmatter
-
-OpenCode skills support a different set of frontmatter fields. Replace Claude Code-specific fields:
-
-| Claude Code | OpenCode | Notes |
-|-------------|----------|-------|
-| `name: skill-name` | `name: skill-name` | Same. |
-| `description: ...` | `description: ...` | Same. |
-| `allowed-tools: [Bash, Read, Glob]` | *(not supported)* | Omit. Tool restrictions are managed via agent definitions, not per-skill. |
-| `disable-model-invocation: true` | *(not supported)* | Omit. |
-| *(n/a)* | `license: MIT` | Optional — for published skills. |
-| *(n/a)* | `compatibility: ["opencode"]` | Optional — platform compatibility hint. |
-| *(n/a)* | `metadata: { ... }` | Optional — arbitrary metadata. |
-
-### Example OpenCode Skill Frontmatter
-
-```yaml
----
-name: onboard
-description: Automated project setup — installs dependencies, checks environment, runs tests, starts servers
----
-```
-
-### Skill Content
-
-The instruction body of skills is identical across platforms. Only the frontmatter wrapper changes. Tool name references in the skill body should use lowercase (`bash`, `read`, `glob`) instead of PascalCase.

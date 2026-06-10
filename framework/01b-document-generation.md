@@ -204,7 +204,7 @@ If a file exists and is not empty (has any non-whitespace content beyond a title
 
 Write the routing table to `docs/modules/ROUTING.md`. This file is owned exclusively by `/document` and is overwritten on every run — it is never human-edited.
 
-`/document` is also responsible for ensuring `CLAUDE.md` (or `AGENTS.md` on OpenCode) contains the reference line. Check whether the line already exists; if not, append it to the Module Documentation section (or add the section if absent):
+`/document` is also responsible for ensuring `CLAUDE.md` contains the reference line. Check whether the line already exists; if not, append it to the Module Documentation section (or add the section if absent):
 
 ```
 See `docs/modules/ROUTING.md` for the module routing table.
@@ -304,13 +304,3 @@ When running `/document --update-routing`:
 
 Only regenerate `docs/modules/ROUTING.md` and the `docs/README.md` module index from current `modules.json` data. Do not touch any module docs. This is useful after manually adding or removing module docs.
 
----
-
-## OpenCode Adaptation
-
-When `{{discovery.platform}} == "opencode"`:
-
-- Module docs live in the same `docs/modules/` location (project root, not platform-specific)
-- `docs/modules/ROUTING.md` is generated identically — the routing table file location does not change by platform
-- `AGENTS.md` (at project root) contains the same brief reference line: "See `docs/modules/ROUTING.md` for the module routing table." instead of `.claude/CLAUDE.md`
-- All other behavior is identical

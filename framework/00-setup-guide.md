@@ -17,7 +17,7 @@ A portable setup guide for establishing an AI-assisted development workflow in a
 
 ## Directory Structure Created
 
-The exact directory name depends on your agent platform (`.claude/`, `.opencode/`, etc.). All paths below use `{{agent_dir}}` as a placeholder — discovery (Step 1) resolves it.
+All paths below use `{{agent_dir}}` as a placeholder — discovery (Step 1) resolves it to `.claude`.
 
 ```
 {{agent_dir}}/
@@ -98,7 +98,7 @@ When a conversation completes, it will tell you to **start a fresh chat** and gi
 > |--------|---------|---------|
 > | `{{field}}` | Direct substitution — replace with the field's value | `{{discovery.app_description}}` |
 > | `{{#if field}}...{{/if}}` | Conditional — include block only if field is truthy (non-null, non-false, non-empty). Use `{{else}}` for an alternate branch: `{{#if field}}...{{else}}...{{/if}}` | `{{#if discovery.dev_servers.backend}}...{{/if}}` |
-> | `{{#if field == "value"}}...{{/if}}` | Equality conditional — include block only if field equals the given string value | `{{#if discovery.platform == "opencode"}}...{{/if}}` |
+> | `{{#if field == "value"}}...{{/if}}` | Equality conditional — include block only if field equals the given string value | `{{#if discovery.context_file_location == "project_root"}}...{{/if}}` |
 > | `{{#each array}}...{{/each}}` | Loop — repeat block for each item; inside, `{{name}}` refers to the item's `name` field. For primitive arrays (e.g., `string[]`), use `{{.}}` to access the current item | `{{#each discovery.linters}}...{{/each}}` |
 > | `{{field or 'default'}}` | Fallback — use the field's value if truthy, otherwise use the default | `{{discovery.directories.backend_root or ''}}` |
 > | `{{array[0].field}}` | Numeric index — access a specific item by position | `{{discovery.linters[0].cmd}}` |
@@ -202,7 +202,7 @@ The generator reads the discovery JSON and creates:
 - `{{agent_dir}}/discovery/` directory (if `deep_discovery` is enabled)
 - `docs/modules/` directory and `docs/modules/ROUTING.md` stub (if `deep_discovery` is enabled)
 
-To understand or customize the generated files, see the supporting references: `04-agents.md` explains the builder/validator architecture and OpenCode adaptation; `05-hooks.md` documents the hook I/O contract and validator template.
+To understand or customize the generated files, see the supporting references: `04-agents.md` explains the builder/validator architecture; `05-hooks.md` documents the hook I/O contract and validator template.
 
 **End of Conversation 1:** Update `.setup-progress.json`, then tell the user:
 
@@ -306,9 +306,9 @@ If both files are missing, start from Conversation 1.
 
 These files are not setup steps but are referenced by the step files:
 
-- **`04-agents.md`** — Builder and validator architecture reference. Covers frontmatter, model selection, tool restrictions, OpenCode adaptation, and the instruction templates the generator uses. Read this to understand or customize generated agent files.
-- **`05-hooks.md`** — Hook script reference. Documents the hook I/O contract, validator template, `check-env.sh`, `audit-docs-hook.sh`, `audit-docs.sh`, and OpenCode plugin wrappers. Read this to understand or customize generated hook scripts.
-- **`orchestration-reference.md`** — Task management tool documentation (TaskCreate/TaskUpdate/Task for Claude Code; todowrite/todoread/task for OpenCode; Resume pattern). Referenced by `/plan_w_team` and `/build` commands.
+- **`04-agents.md`** — Builder and validator architecture reference. Covers frontmatter, model selection, tool restrictions, and the instruction templates the generator uses. Read this to understand or customize generated agent files.
+- **`05-hooks.md`** — Hook script reference. Documents the hook I/O contract, validator template, `check-env.sh`, `audit-docs-hook.sh`, and `audit-docs.sh`. Read this to understand or customize generated hook scripts.
+- **`orchestration-reference.md`** — Task management tool documentation (TaskCreate/TaskUpdate/Task; Resume pattern). Referenced by `/plan_w_team` and `/build` commands.
 - **`DESIGN.md`** — Human-readable rationale for design decisions. Not consumed during setup — exists for framework maintainers and curious users.
 
 ---

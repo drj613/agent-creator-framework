@@ -45,7 +45,7 @@ The `{{discovery.*}}` syntax in step files 02–08 is pseudo-templating that the
 1. Scan all generated files for unresolved markers:
    ```bash
    grep -rn '{{' .claude/
-   grep -rn '{{' WORKFLOW.md CLAUDE.md AGENTS.md 2>/dev/null
+   grep -rn '{{' WORKFLOW.md CLAUDE.md 2>/dev/null
    # Also look for literal "null" in paths or commands
    grep -rn ': null' .claude/agents/ .claude/commands/ 2>/dev/null
    ```
@@ -67,7 +67,7 @@ For any `null` field, the correct behavior is to omit the entire line or block �
 
 **Symptom:**
 ```
-ERROR: Missing required fields in discovery context: .platform .models.complex
+ERROR: Missing required fields in discovery context: .agent_dir .models.complex
 ```
 or
 ```
@@ -84,7 +84,7 @@ ERROR: features.post_tool_use_hooks is true but no linters or type_checkers are 
    jq . .claude/.discovery-context.json
    ```
 2. Required top-level fields that must be non-null:
-   - `.platform`, `.agent_dir`, `.context_filename`, `.project_type`, `.primary_language`
+   - `.agent_dir`, `.context_filename`, `.project_type`, `.primary_language`
    - `.test_runner.cmd`, `.test_runner.name`
    - `.models.complex`, `.models.standard`, `.models.simple`
 3. Conditional requirements enforced by `validate.sh`:
@@ -238,82 +238,18 @@ bash framework/generator/generate.sh .claude/.discovery-context.json
 The agent does not have project-specific knowledge — wrong test commands, generic tool names, project rules are ignored. Running `/dev` or `/build` produces responses that do not reflect the project setup. The context file exists on disk but appears to be ignored.
 
 **Cause:**
-Each platform requires the context file to have a specific name in a specific location:
-
-| Platform | Required filename | Required location |
-|---|---|---|
-| Claude Code | `CLAUDE.md` | Inside `agent_dir` (e.g., `.claude/CLAUDE.md`) |
-| OpenCode | `AGENTS.md` | Project root — NOT inside `.opencode/` |
-
-If `context_filename` or `context_file_location` was recorded incorrectly in the discovery JSON, the setup agent writes the file to the wrong path and the platform silently starts without it.
+Claude Code requires the context file to be named `CLAUDE.md` and to live inside `agent_dir` (e.g., `.claude/CLAUDE.md`). If the setup agent wrote it to the wrong path (e.g., project root), Claude Code silently starts without it.
 
 **Fix:**
-1. Check the discovery JSON for the platform and context file settings:
+1. Check the discovery JSON for the context file settings:
    ```bash
-   jq '{platform, context_filename, context_file_location, agent_dir}' \
-     .claude/.discovery-context.json
+   jq '{agent_dir}' .claude/.discovery-context.json
    ```
-2. Verify the file exists at the correct path for your platform:
+2. Verify the file exists at the correct path:
    ```bash
-   # Claude Code
    ls .claude/CLAUDE.md
-
-   # OpenCode
-   ls AGENTS.md
    ```
 3. If the file is at the wrong path, move it:
    ```bash
-   # Claude Code: file was written to project root, move into .claude/
    mv CLAUDE.md .claude/CLAUDE.md
-
-   # OpenCode: file was written inside .opencode/, move to project root
-   mv .opencode/AGENTS.md ./AGENTS.md
    ```
-4. Correct the discovery JSON before regenerating to prevent recurrence:
-   ```bash
-   # Claude Code: context file lives inside agent_dir
-   jq '.context_file_location = "inside_agent_dir"' \
-     .claude/.discovery-context.json > /tmp/ctx.json \
-     && mv /tmp/ctx.json .claude/.discovery-context.json
-   ```
-
----
-
-## 10. OpenCode: TypeScript plugin compilation error
-
-**Symptom:**
-OpenCode fails to load `validate-on-write.ts` or `audit-docs-plugin.ts` with an error such as:
-```
-SyntaxError: Unexpected token
-Error: Cannot find module 'child_process'
-TypeError: execSync is not a function
-```
-Or the plugin loads silently but the `VALIDATORS` array is empty so no validation is ever triggered.
-
-**Cause (a) — empty VALIDATORS array:**
-`generate_validate_on_write_ts` in `opencode.sh` builds the `VALIDATORS` array by iterating over `.linters` and `.type_checkers`. If both arrays have zero entries, the generated TypeScript file contains an empty array and no scripts are called. This can occur when `features.post_tool_use_hooks` is enabled but no linters or type checkers are present — a state `validate.sh` normally blocks, but which can appear if the JSON was edited manually after generation.
-
-**Cause (b) — runtime or syntax mismatch:**
-OpenCode executes plugins in its own JavaScript runtime. If the plugin uses Node.js APIs (`child_process`, `path`) that the runtime does not expose, or if a discovery field value (linter name or command) contains a backtick or `${` sequence that corrupts the template literal in the generated TypeScript, a syntax or runtime error results.
-
-**Fix for empty VALIDATORS:**
-```bash
-# Verify linters and type checkers are present in the discovery JSON
-jq '{linters: [.linters[].name], type_checkers: [.type_checkers[].name]}' \
-  .claude/.discovery-context.json
-
-# If both are empty but hooks are enabled, either add a linter entry
-# or disable post_tool_use_hooks and regenerate:
-jq '.features.post_tool_use_hooks = false' \
-  .claude/.discovery-context.json > /tmp/ctx.json \
-  && mv /tmp/ctx.json .claude/.discovery-context.json
-bash framework/generator/generate.sh .claude/.discovery-context.json
-```
-
-**Fix for syntax / runtime errors:**
-1. Open the generated plugin and inspect the imports and `VALIDATORS` array:
-   ```bash
-   head -25 .opencode/hooks/validate-on-write.ts
-   ```
-2. If a linter name or `cmd` contains a backtick or `${`, fix the value in `.discovery-context.json` (those characters are template-literal metacharacters in JavaScript) and regenerate.
-3. If `child_process` or `path` are unavailable in OpenCode's runtime, consult the OpenCode plugin API documentation for the correct import path or built-in hook interface and patch the generated file accordingly.

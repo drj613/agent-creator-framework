@@ -60,34 +60,3 @@ Task({ ..., resume: "agentId" })
 6. Resume agents with `Task` + `resume` for follow-up work
 7. Mark complete with `TaskUpdate` + `status: "completed"`
 
----
-
-## OpenCode Tool Mapping
-
-When `{{discovery.platform_capabilities.task_tools}} == "unified"` (i.e. OpenCode), the task management tools have different names but equivalent functionality:
-
-| Claude Code | OpenCode | Notes |
-|-------------|----------|-------|
-| `TaskCreate({ subject, description, activeForm })` | `todowrite({ todos: [{ content, status }] })` | Creates task items. `content` combines subject + description. |
-| `TaskUpdate({ taskId, status })` | `todowrite({ todos: [{ id, status }] })` | Updates existing task by ID. |
-| `TaskList({})` | `todoread({})` | Returns all tasks with statuses. |
-| `TaskGet({ taskId })` | `todoread({ id })` | Returns details for a specific task. |
-| `Task({ prompt, subagent_type, ... })` | `task({ prompt, agent, ... })` | Dispatches a subagent. `subagent_type` → `agent`. |
-| `Task({ resume: agentId })` | `task({ resume: agentId })` | Resume pattern is the same. |
-| `TaskOutput({ task_id })` | *(returned by task)* | Output retrieval integrated into task tool response. |
-
-### Key Differences
-
-- **Task creation:** OpenCode's `todowrite` is a batch operation — pass an array of todos to create/update multiple at once.
-- **Status values:** Both use `pending`, `in_progress`, `completed`.
-- **Dependencies:** OpenCode uses `todowrite` with dependency fields rather than `addBlockedBy`.
-- **Agent dispatch:** `task` replaces `Task` — same `prompt`, `run_in_background`, `resume` parameters. Use `agent` instead of `subagent_type`.
-
-### Orchestration Workflow (OpenCode)
-
-1. Create all tasks with `todowrite`
-2. Set dependencies within the `todowrite` call
-3. Deploy agents with `task`
-4. Monitor with `todoread`
-5. Resume agents with `task` + `resume`
-6. Mark complete with `todowrite` + updated status

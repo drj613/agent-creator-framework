@@ -12,7 +12,6 @@ _sh_files=(
   "$_GENERATOR_ROOT/generators/hooks.sh"
   "$_GENERATOR_ROOT/generators/validators.sh"
   "$_GENERATOR_ROOT/generators/gitignore.sh"
-  "$_GENERATOR_ROOT/generators/opencode.sh"
   "$_GENERATOR_ROOT/tests/run_tests.sh"
 )
 
