@@ -6,16 +6,22 @@ Starter templates for generated project files. All `{{discovery.*}}` placeholder
 
 ```
 templates/
-├── commands/           # Slash command files → {{agent_dir}}/commands/
-│   ├── dev.md          # /dev — start dev servers
-│   ├── plan_w_team.md  # /plan_w_team — create implementation plan
-│   ├── build.md        # /build — execute a plan with agent team
-│   ├── review.md       # /review — parallel domain-specialist code review
-│   ├── verify-browser.md  # /verify-browser — Playwright UI verification
-│   ├── test.md         # /test — run tests and report
-│   └── audit-docs.md   # /audit-docs — documentation health check
+├── commands/                  # Slash command files → {{agent_dir}}/commands/
+│   ├── dev.md                 # /dev — start dev servers
+│   ├── plan_w_team.md         # /plan_w_team — create implementation plan
+│   ├── build.md               # /build — execute a plan with agent team
+│   ├── ship.md                # /ship — archive plan, push, open draft PR
+│   ├── finish.md              # /finish — finish branch (merge/PR/keep/discard)
+│   ├── team_review.md         # /team_review — parallel domain-specialist code review
+│   ├── fix.md                 # /fix — apply Dev Decision 'fix' findings from /team_review
+│   ├── quickfix.md            # /quickfix — light-tier TDD fix for small decision-free changes
+│   ├── verify-browser.md      # /verify-browser — Playwright UI verification
+│   ├── test.md                # /test — run tests and report
+│   └── audit-docs.md          # /audit-docs — documentation health check
+├── scripts/
+│   └── wait-for-copilot.sh    # Poll GitHub PR for Copilot bot review (github_flow only)
 ├── context/
-│   └── CLAUDE.md       # Context file template → {{agent_dir}}/CLAUDE.md
+│   └── CLAUDE.md              # Context file template → {{agent_dir}}/CLAUDE.md
 ├── rules/
 │   ├── commit-workflow.md      # → {{agent_dir}}/rules/commit-workflow.md
 │   └── documentation-rules.md  # → {{agent_dir}}/rules/documentation-rules.md
@@ -30,14 +36,16 @@ During setup, the agent copies the relevant template, replaces all `{{discovery.
 
 **Feature gates** (from `discovery.features`):
 - `commands/dev.md` — only if `features.dev_command` is true
-- `commands/plan_w_team.md` + `commands/build.md` — only if `features.plan_build` is true
-- `commands/review.md` — only if `features.review` is true
+- `commands/plan_w_team.md` + `commands/build.md` + `commands/ship.md` + `commands/finish.md` — only if `features.plan_build` is true
+- `commands/team_review.md` — only if `features.review` is true
 - `commands/fix.md` — only if `features.review` is true
+- `commands/quickfix.md` — only if `features.light_tier` is true
 - `commands/verify-browser.md` — only if `features.verify_browser` is true
 - `commands/test.md` — only if `features.test` is true
 - `commands/audit-docs.md` — only if `features.audit_docs` is true
 - `rules/commit-workflow.md` — only if `features.commit_workflow` is true
 - `rules/documentation-rules.md` — only if `features.documentation_structure` is true
 - `skills/onboard/SKILL.md` — only if `features.onboarding_skill` is true
+- `scripts/wait-for-copilot.sh` — only if `features.github_flow` is true; copied by `generate.sh` to `{{agent_dir}}/scripts/wait-for-copilot.sh`
 
 See the framework step guides (`03-commands.md`, `02-context-file.md`, `06-rules.md`, `07-skills.md`) for full adaptation instructions.

@@ -213,8 +213,10 @@ These questions are mandatory regardless of what auto-detection found.
 > Which workflow features should be included? All are on by default — deselect any you do not need.
 >
 > - [ ] `/dev` — start dev servers
-> - [ ] `/plan_w_team` + `/build` — plan-then-build workflow
-> - [ ] `/review` — parallel domain-specialist code review
+> - [ ] `/plan_w_team` + `/build` + `/ship` + `/finish` — plan-build-ship lifecycle
+> - [ ] Plan adversary — adversarial review of every plan before execution (eight-lens gap analysis)
+> - [ ] `/team_review` + `/fix` — parallel domain-specialist review with finding validation and Dev Decision workflow
+> - [ ] `/quickfix` light tier — gated TDD path for small decision-free fixes, plus `/team_review --light`
 > - [ ] `/verify-browser` — Playwright UI verification
 > - [ ] `/test` — run test suite with reporting
 > - [ ] `/audit-docs` — documentation health check
@@ -224,13 +226,28 @@ These questions are mandatory regardless of what auto-detection found.
 > - [ ] Onboarding skill
 > - [ ] Deep discovery + module docs — deep codebase analysis, module documentation, routing table
 
+**Issue Tracking**
+
+> Does this project use the Beads issue tracker (`br` CLI)?
+>
+> Auto-detect the default: yes if a `.beads/` directory exists or `br` is on PATH. Sets `features.beads_tickets`. When enabled, `/plan_w_team` creates one ticket per task, `/build` updates ticket status as tasks complete, `/quickfix` files bug tickets, and `/ship` warns on open tickets. When disabled, all ticket steps are omitted from the generated commands.
+
+**Git Hosting**
+
+> Is this repository hosted on GitHub with the `gh` CLI authenticated?
+>
+> Auto-detect the default: yes if `git remote -v` shows a github.com remote AND `gh auth status` succeeds. Sets `features.github_flow`. When enabled: `/ship` opens draft PRs, `/team_review` requires an open PR and cross-references PR review comments (e.g. GitHub Copilot) with inline-reply threading from `/fix`. When disabled, these commands degrade to push-only and local-diff review.
+
 ### 2.1a Feature Flag Validation
 
 After the user selects features, validate these constraints. If a constraint is violated, inform the user and adjust:
 
 | Constraint | Reason |
 |-----------|--------|
-| `plan_build` enables both `/plan_w_team` AND `/build` together | They are a paired workflow — one produces specs, the other consumes them |
+| `plan_build` enables `/plan_w_team`, `/build`, `/ship`, and `/finish` together | They are one lifecycle — plan produces specs, build consumes them, ship archives and publishes, finish completes the branch |
+| `plan_adversary` requires `plan_build` | The adversary reviews plans produced by `/plan_w_team` |
+| `light_tier` requires `plan_build` | `/quickfix` escalates discovered decisions to `/plan_w_team` |
+| `github_flow` requires `git.is_repo` to be true | PR flow operates on a git remote |
 | `audit_docs` requires `documentation_structure` | The audit command operates on the `docs/` structure created by that feature |
 | `post_tool_use_hooks` requires at least one entry in `linters` or `type_checkers` | Hooks run linters/type-checkers — without any, the hooks have nothing to run |
 | `verify_browser` requires `dev_servers` to be non-null | Browser verification navigates to the running app |
@@ -453,8 +470,12 @@ DISCOVERY_CONTEXT:
   # --- Features ---
   features:
     dev_command: true
-    plan_build: true
-    review: true
+    plan_build: true                  # /plan_w_team + /build + /ship + /finish lifecycle
+    plan_adversary: true              # adversarial plan review before execution (requires plan_build)
+    review: true                      # /team_review + /fix — validated review with Dev Decisions
+    light_tier: true                  # /quickfix + /team_review --light (requires plan_build)
+    beads_tickets: true               # Beads (br) issue tracking woven through plan/build/quickfix/ship
+    github_flow: true                 # GitHub PR flow: draft PRs, PR-comment cross-referencing, inline resolutions
     verify_browser: true
     test: true
     audit_docs: true

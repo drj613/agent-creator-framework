@@ -31,8 +31,11 @@ disallowed-tools: Task, EnterPlanMode  # optional — restrict tool use
 ├── dev.md             # Start dev servers
 ├── plan_w_team.md     # Create implementation plan → specs/
 ├── build.md           # Execute a plan with agent team
-├── review.md          # Parallel domain-specialist code review
-├── fix.md             # Apply Must Fix items from /review
+├── ship.md            # Archive plan, push, open draft PR
+├── finish.md          # Finish branch — merge/PR/keep/discard
+├── team_review.md     # Parallel domain-specialist code review
+├── fix.md             # Apply Dev Decision 'fix' findings from /team_review
+├── quickfix.md        # Light-tier TDD fix for small decision-free changes
 ├── verify-browser.md  # Playwright UI verification
 ├── test.md            # Run tests and report
 └── audit-docs.md      # Documentation health check
@@ -45,13 +48,36 @@ Create only the commands whose corresponding feature flag is true:
 | `/dev` | `discovery.features.dev_command` |
 | `/plan_w_team` | `discovery.features.plan_build` |
 | `/build` | `discovery.features.plan_build` |
-| `/review` | `discovery.features.review` |
+| `/ship` | `discovery.features.plan_build` |
+| `/finish` | `discovery.features.plan_build` |
+| `/team_review` | `discovery.features.review` |
 | `/fix` | `discovery.features.review` |
+| `/quickfix` | `discovery.features.light_tier` |
 | `/verify-browser` | `discovery.features.verify_browser` |
 | `/test` | `discovery.features.test` |
 | `/audit-docs` | `discovery.features.audit_docs` |
 | `/discovery` | `discovery.features.deep_discovery` |
 | `/document` | `discovery.features.deep_discovery` |
+
+---
+
+## Two-Tier Workflow
+
+The workflow runs on two tiers. **Choosing a tier:** open decisions to make? `/plan_w_team`. Forced fix with no decisions? `/quickfix`.
+
+**Heavy tier** — features and anything with design decisions:
+
+```
+/plan_w_team → /build (TDD) → /ship → /team_review → /fix → /finish
+```
+
+**Light tier** — small, decision-free fixes (≤ 3 files, no migration, no route/permission/dependency change):
+
+```
+/quickfix → /finish → /team_review --light → /fix
+```
+
+A project WORKFLOW.md should open with this tier decision rule. Reference the payint WORKFLOW.md at `/Users/djdjo/Documents/enovis/payint/WORKFLOW.md` as the authoritative example of how a generated WORKFLOW.md should be structured. It includes: the tier decision sentence, both lifecycle pipelines as code blocks, one-line descriptions of every command, the issue tracking command reference, a section describing each agent (builder TDD cycle, validator Validator Controls gate, plan-adversary lenses), and a key-files table. When generating a project WORKFLOW.md, mirror that structure and adapt agent descriptions to the project's stack.
 
 ---
 
@@ -137,367 +163,81 @@ Adapt to the project — if backend-only or frontend-only, remove the irrelevant
 
 ## `/plan_w_team` — Create an Implementation Plan
 
-**Purpose:** Analyze a requirement, explore the codebase, design the solution, and save a spec document to `specs/`. No code is written — output is only a plan file. The saved plan is then executed by `/build`.
+**Purpose:** Analyze a requirement, explore the codebase, design the solution, and save a spec document to `specs/`. No code is written — output is only a plan file that `/build` then executes.
 
 The command takes two arguments: the user's requirement, and an optional orchestration hint that guides team composition and task structure.
 
+**Template:** `framework/generator/templates/commands/plan_w_team.md`
+**Feature gate:** `features.plan_build`
+
+### Key workflow steps
+
+1. Parse `USER_PROMPT` and (optionally) split an `ORCHESTRATION_PROMPT` using ` --- ` as delimiter.
+2. Explore the codebase directly (no subagents). If `deep_discovery` is enabled, consult `docs/modules/ROUTING.md` first and read relevant module docs.
+3. Design the solution; define team and tasks.
+4. Save the plan to `specs/<kebab-case-name>.md`.
+
+**Step 7a — Adversarial review (requires `features.plan_adversary`):** After saving the plan, dispatch the `plan-adversary` agent in the foreground to stress-test it. The agent returns a report tagged `critical | important | nice-to-have`.
+
+**Step 7b — Incorporate findings:** Read the adversarial report and update the plan in place. For every `critical` or `important` finding either add coverage (new task, new test, new acceptance criterion, wired dependency) or document it under `## Edge Cases & Risks` with an explicit accept/defer decision and reason. `nice-to-have` findings can be listed under `## Edge Cases & Risks` as deferred without further action. If new tasks were added, renumber the Step by Step Tasks section.
+
+**Step 8 — Beads tickets (requires `features.beads_tickets`):** One `br create` per task in Step by Step Tasks; set deps with `br dep add`; reference the plan path in each description. Capture each returned ticket ID. Then fill in every `**Beads Ticket**` field and the `## Beads Tickets` index table.
+
+**Step 9 — Sync (requires `features.beads_tickets`):** `br sync --flush-only`.
+
+**Step 10 — Annotate plan:** Invoke `/plannotator-annotate` on the saved plan file.
+
+### Plan format notes
+
+- Every plan includes `## Test Requirements` with test-first as default approach.
+- Every plan includes `## Validator Controls` with `validator_e2e_capture: false` as the default. The plan author sets it to `true` only when the validator should save a reusable E2E spec file for the task.
+- When `plan_adversary` is enabled, every plan includes `## Edge Cases & Risks` populated after step 7b.
+- When `beads_tickets` is enabled, every plan includes a `## Beads Tickets` index table and each task entry has a `**Beads Ticket**` field.
+
+### Plan format (abbreviated)
+
+The full canonical format is in the template. Key sections:
+
 ```markdown
----
-description: Create an implementation plan and save it to specs/
-argument-hint: "[requirement] [orchestration hint]"
-model: {{discovery.models.complex}}
-disallowed-tools: Task, EnterPlanMode
----
-
-# Plan With Team
-
-Create a detailed implementation plan based on USER_PROMPT. Analyze the request, think through
-the approach, and save a spec document to PLAN_OUTPUT_DIRECTORY that can be used as a blueprint
-for actual development. Follow the Instructions and Workflow below.
-
-## Variables
-
-USER_PROMPT: $1
-ORCHESTRATION_PROMPT: $2  # Optional — guides team composition, task granularity, parallel/sequential decisions
-PLAN_OUTPUT_DIRECTORY: `specs/`
-TEAM_MEMBERS: `{{discovery.agent_dir}}/agents/team/*.md`
-
-## Instructions
-
-- **PLANNING ONLY**: Do NOT build, write code, or deploy agents. Output is a plan document saved to PLAN_OUTPUT_DIRECTORY.
-- If no USER_PROMPT is provided, stop and ask the user to provide it.
-- If ORCHESTRATION_PROMPT is provided, use it to guide team composition, task granularity, dependency structure, and parallel/sequential decisions.
-- Determine the task type (chore|feature|refactor|fix|enhancement) and complexity (simple|medium|complex).
-- Think deeply about the best approach before writing the plan.
-- Explore the codebase directly (no subagents) to understand existing patterns and architecture.
-- Generate a descriptive kebab-case filename based on the plan topic.
-- Save the complete plan to `PLAN_OUTPUT_DIRECTORY/<filename>.md`.
-- The plan must be detailed enough that another agent could follow it without clarification.
-- Include code examples or pseudo-code where it clarifies complex steps.
-- Consider edge cases, error handling, and scalability.
-- **Test-first by default:** Plans should specify tests to write before implementation. The first builder task writes failing tests; subsequent tasks implement code to make them pass. Include a `## Test Requirements` section in every plan listing required tests, test types, and coverage expectations. A spec is not complete until all listed tests pass.
-
-## Team Orchestration
-
-As team lead when executing plans via /build, you coordinate work via task management tools.
-You NEVER write code directly — you orchestrate team members.
-
-For full documentation of TaskCreate, TaskUpdate, TaskList, TaskGet, Task, and the Resume
-pattern, see `orchestration-reference.md`.
-
-## Workflow
-
-PLANNING ONLY — do not execute, build, or deploy.
-
-1. Parse USER_PROMPT — understand the core problem and desired outcome
-{{#if discovery.features.deep_discovery}}
-1a. **Consult module docs** — read `docs/modules/ROUTING.md` to find which module docs cover the files this plan will likely affect. For each matching entry, read the corresponding `docs/modules/<module>.md` to understand patterns, conventions, and dependencies. Record consulted docs in the plan's "Module Docs Consulted" section.
-{{/if}}
-2. Explore codebase — read relevant files directly to understand existing patterns
-3. Design solution — architecture decisions, implementation approach
-4. Define team — identify needed agents from TEAM_MEMBERS or use general-purpose
-5. Define tasks — write out steps with IDs, dependencies, assignments
-6. Generate filename — descriptive kebab-case
-7. Save plan — write to PLAN_OUTPUT_DIRECTORY/<filename>.md
-8. Report — summarize per the Report section below
-
-## Plan Format
-
-Replace all <angle bracket> placeholders with actual content.
-Non-placeholder text must appear exactly as written.
-
----
-
 # Plan: <task name>
-
 ## Task Description
-<describe the task in detail>
-
 ## Objective
-<what will be accomplished when this plan is complete>
-
-<if feature or medium/complex complexity:>
-## Problem Statement
-<the specific problem or opportunity this addresses>
-
-## Solution Approach
-<how the solution addresses the objective>
-</if>
-
-{{#if discovery.features.deep_discovery}}
-## Module Docs Consulted
-<list module docs that were read during planning, e.g.:>
-- `docs/modules/auth.md` — authentication patterns and JWT conventions
-- `docs/modules/database.md` — repository pattern and migration conventions
-{{/if}}
-
+## Beads Tickets          ← beads_tickets only
+## Module Docs Consulted  ← deep_discovery only
 ## Relevant Files
-<bullet list of existing files relevant to the task, with one-line explanations>
-
-### New Files
-<files to be created, if any>
-
-<if medium/complex complexity:>
-## Implementation Phases
-### Phase 1: Foundation
-### Phase 2: Core Implementation
-### Phase 3: Integration & Polish
-</if>
-
 ## Team Orchestration
-
-You operate as team lead. Use Task and Task* tools exclusively — never touch the codebase directly.
-
-### Team Members
-
-- Builder
-  - Name: <unique name, e.g. "builder-api">
-  - Role: <single focused responsibility>
-  - Agent Type: <agent name from TEAM_MEMBERS, or "general-purpose">
-  - Resume: true
-- <additional team members as needed>
-
 ## Step by Step Tasks
-
-Run TaskCreate for each task before deploying any agents.
-
-Task IDs must be kebab-case alphanumeric (`[a-z0-9-]+`). The `Depends On` field must reference task IDs (not task names or descriptions).
-
 ### 1. <Write Tests (Test-First)>
-- **Task ID**: <write-tests-kebab-case-id>
+- **Task ID**: ...
+- **Beads Ticket**: ...  ← beads_tickets only
 - **Depends On**: none
-- **Assigned To**: <team member name>
-- **Agent Type**: <agent type>
-- **Parallel**: <true|false>
-- Write failing tests per the Test Requirements section
-- Verify all new tests fail before implementation begins
-
-### 2. <Implement Feature>
-- **Task ID**: <kebab-case-id>
-- **Depends On**: <write-tests-task-id>
-- **Assigned To**: <team member name>
-- **Agent Type**: <agent type>
-- **Parallel**: <true|false>
-- <specific action>
-- All tests from the test-writing task must pass before marking complete
-
-### N-1. Run Tests
-- **Task ID**: run-tests
-- **Depends On**: <all builder task IDs>
-- **Assigned To**: <last builder>
+- **Assigned To**: ...
 - **Agent Type**: builder
-- **Parallel**: false
-- Run the full test suite — all tests must pass before marking complete
-- Fix any failures before proceeding
-
+- ...
 ### N. Final Validation
-- **Task ID**: validate-all
-- **Depends On**: run-tests, <all other task IDs>
-- **Assigned To**: <validator>
 - **Agent Type**: validator
-- **Parallel**: false
-- Run test suite independently to confirm
-- Run lint and type checks
-- Verify acceptance criteria met
-
-## Task Granularity
-
-A well-sized task:
-- Can be completed by one agent without losing context (roughly 1–5 files changed)
-- Has a single clear acceptance criterion or a small set of closely related criteria
-- Depends on 0–2 other tasks (deep dependency chains signal too-fine granularity)
-
-**Anti-patterns:** "Rename variable in 3 files" as a separate task (too fine — fold into the task that needs the rename). "Implement entire auth system" as one task (too coarse — split by concern: middleware, routes, tests).
-
-**Heuristic:** If you can describe the task in 1–2 sentences and it maps to a coherent unit of work, it's probably right-sized.
-
 ## Acceptance Criteria
-
-Use checkbox format. Each criterion must be specific and independently verifiable.
-
-- [ ] <criterion 1 — e.g. POST /auth/login endpoint accepts username + password>
-- [ ] <criterion 2 — e.g. Successful login returns JWT token in response body>
-- [ ] <criterion 3 — e.g. Failed login returns 401 with error message>
-
+## Validator Controls
+validator_e2e_capture: false
+## Edge Cases & Risks     ← plan_adversary only
 ## Test Requirements
-
-Specs are not complete until their tests pass. Define what tests must exist:
-
-**Test approach:** <test-first | test-alongside | not-applicable>
-- `test-first` (default): write failing tests before implementation
-- `test-alongside`: write tests during implementation (use only when the user explicitly requests it or the task is pure refactoring with existing coverage)
-- `not-applicable`: no testable behavior (documentation-only, config changes, dependency upgrades, CSS/styling-only). Requires justification below.
-
-**Required tests:**
-- [ ] <test 1 — e.g. Unit: AuthService.login returns JWT for valid credentials>
-- [ ] <test 2 — e.g. Unit: AuthService.login throws for invalid credentials>
-- [ ] <test 3 — e.g. Integration: POST /auth/login returns 200 with token>
-- [ ] <test 4 — e.g. Integration: POST /auth/login returns 401 for bad password>
-
-**Test types needed:**
-- Unit tests: <yes/no — what to cover>
-- Integration tests: <yes/no — what to cover>
-- E2E tests: <yes/no — what to cover, only if verify_browser is enabled>
-
-**Coverage notes:** <any specific coverage expectations, e.g. "all new public functions must have unit tests", "all new API endpoints must have integration tests">
-
-**Skip justification:** <required if test approach is not-applicable — explain why this change has no testable behavior>
-
+**Test approach:** test-first
+**Required tests:** ...
 ## Validation Commands
-<the exact commands to run to verify correctness — adapted to this project's stack>
-
 ## Notes
-<optional: edge cases, dependencies, open questions>
-
----
-
-## Example Plan
-
-A complete example showing the expected plan structure for a medium-complexity feature:
-
-````markdown
-# Plan: add-api-rate-limiting
-
-## Task Description
-Add rate limiting to the public API endpoints to prevent abuse and ensure fair usage across tenants.
-
-## Objective
-All public API routes enforce per-tenant rate limits with configurable thresholds, returning 429 Too Many Requests when exceeded.
-
-## Problem Statement
-The API currently has no rate limiting. A single tenant can consume unlimited resources, degrading service for others. Production logs show occasional traffic spikes from individual API keys causing elevated p99 latency.
-
-## Solution Approach
-Implement a sliding window rate limiter using Redis, applied as middleware to all routes under `/api/v1/`. Limits are configurable per tier (free: 100/min, pro: 1000/min). Rate limit headers (X-RateLimit-Remaining, X-RateLimit-Reset) are included in every response.
-
-## Relevant Files
-- `src/middleware/auth.ts` — existing auth middleware where rate limiting will be added
-- `src/config/index.ts` — app configuration, will add rate limit thresholds
-- `src/lib/redis.ts` — existing Redis client
-- `tests/middleware/auth.test.ts` — existing auth tests
-
-### New Files
-- `src/middleware/rate-limiter.ts` — rate limiting middleware
-- `tests/middleware/rate-limiter.test.ts` — rate limiter tests
-
-## Team Orchestration
-
-You operate as team lead. Use Task and Task* tools exclusively — never touch the codebase directly.
-
-### Team Members
-
-- Builder
-  - Name: builder-api
-  - Role: Implement rate limiter middleware and configuration
-  - Agent Type: builder
-  - Resume: true
-- Validator
-  - Name: validator-api
-  - Role: Verify acceptance criteria and run full test suite
-  - Agent Type: validator
-  - Resume: true
-
-## Step by Step Tasks
-
-Run TaskCreate for each task before deploying any agents.
-
-### 1. Write Rate Limiter Tests (Test-First)
-- **Task ID**: write-rate-limiter-tests
-- **Depends On**: none
-- **Assigned To**: builder-api
-- **Agent Type**: builder
-- **Parallel**: false
-- Create `tests/middleware/rate-limiter.test.ts` with failing tests per the Test Requirements section
-- Write unit tests for the sliding window logic (increment, reset, headers)
-- Write integration tests for HTTP responses (200 under limit, 429 over limit, tier enforcement)
-- Verify all new tests fail (no implementation yet) — this confirms tests are testing the right thing
-
-### 2. Implement Rate Limiter Middleware
-- **Task ID**: implement-rate-limiter
-- **Depends On**: write-rate-limiter-tests
-- **Assigned To**: builder-api
-- **Agent Type**: builder
-- **Parallel**: false
-- Create `src/middleware/rate-limiter.ts` with sliding window algorithm using Redis
-- Add rate limit tier configuration to `src/config/index.ts`
-- Wire middleware into the Express app before route handlers
-- All tests from step 1 must pass before marking complete
-
-### 3. Run Tests
-- **Task ID**: run-tests
-- **Depends On**: implement-rate-limiter
-- **Assigned To**: builder-api
-- **Agent Type**: builder
-- **Parallel**: false
-- Run the full test suite — all tests must pass before marking complete
-- Fix any failures before proceeding
-
-### 4. Final Validation
-- **Task ID**: validate-all
-- **Depends On**: run-tests
-- **Assigned To**: validator-api
-- **Agent Type**: validator
-- **Parallel**: false
-- Run test suite independently to confirm
-- Run lint and type checks
-- Verify acceptance criteria met
-
-## Acceptance Criteria
-
-- [ ] All `/api/v1/` routes return `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers
-- [ ] Requests exceeding the rate limit receive 429 status with a JSON error body
-- [ ] Free tier is limited to 100 requests per minute per API key
-- [ ] Pro tier is limited to 1000 requests per minute per API key
-- [ ] Rate limits use a sliding window (not fixed window)
-- [ ] All existing tests continue to pass
-
-## Test Requirements
-
-**Test approach:** test-first — write failing tests before implementing the rate limiter
-
-**Required tests:**
-- [ ] Unit: sliding window counter increments correctly
-- [ ] Unit: sliding window counter resets after window expires
-- [ ] Unit: rate limiter returns correct headers (Remaining, Reset)
-- [ ] Integration: request under limit returns 200 with rate limit headers
-- [ ] Integration: request at limit returns 200
-- [ ] Integration: request over limit returns 429 with JSON error body
-- [ ] Integration: free tier limit (100/min) enforced
-- [ ] Integration: pro tier limit (1000/min) enforced
-
-**Test types needed:**
-- Unit tests: yes — sliding window algorithm logic, header calculation
-- Integration tests: yes — full HTTP request/response cycle with Redis
-- E2E tests: no
-
-**Coverage notes:** All new public functions in rate-limiter.ts must have unit tests. All new middleware behavior must have integration tests.
-
-## Validation Commands
-```bash
-pnpm vitest run tests/middleware/rate-limiter.test.ts
-pnpm vitest run
-pnpm tsc --noEmit
-pnpm eslint src/middleware/rate-limiter.ts
 ```
 
-## Notes
-- Redis must be running locally for integration tests (`docker compose up redis`)
-- Consider adding a bypass for health check endpoints (`/api/v1/health`)
-````
+### Report
 
----
-
-## Report
-
-After saving the plan, summarize:
+After saving the plan (and tickets, if enabled):
 
 ```
-Plan created: PLAN_OUTPUT_DIRECTORY/<filename>.md
+Plan created: specs/<filename>.md
 Topic: <what it covers>
 Complexity: <simple|medium|complex>
 
 Tasks:
-- <task id> — <owner> (<parallel|sequential>)
+- <task id> — <owner> (<parallel|sequential>) [Beads: <ticket-id>]
 - ...
 
 Team:
@@ -505,7 +245,7 @@ Team:
 - ...
 
 Run when ready:
-/build PLAN_OUTPUT_DIRECTORY/<filename>.md
+/build specs/<filename>.md
 ```
 
 ---
@@ -514,203 +254,334 @@ Run when ready:
 
 **Purpose:** Pre-flight check the plan, confirm with the user, then execute it by dispatching the agent team.
 
-```markdown
----
-description: Pre-flight check and execute a plan
-argument-hint: [path-to-plan]
----
+**Template:** `framework/generator/templates/commands/build.md`
+**Feature gate:** `features.plan_build`
 
-# Build
+### Pre-flight checks
 
-## Variables
-PATH_TO_PLAN: $ARGUMENTS
+1. **File check:** plan file must exist.
+2. **Beads ticket check (requires `beads_tickets`):** Parse the `## Beads Tickets` table and each task's `**Beads Ticket**` field. Build a `task-id → ticket-id` map. Warn if any field reads `TBD` or is missing; wait for confirmation. For valid IDs, run `br show <ticket-id>` and store output as context.
+3. **Agent type check:** every Agent Type in the plan's Team Members section must have a matching `.md` in `{{discovery.agent_dir}}/agents/team/`. Stop if any are missing.
+4. **Task ID check:** all task IDs must match `[a-z0-9-]+` and be unique.
+5. **Dependency check:** build dependency graph; check for cycles and missing task IDs.
+6. **Test requirements check:** warn if `## Test Requirements` is missing; wait for confirmation.
+7. **Validator controls check:** read `validator_e2e_capture` from `## Validator Controls`; default to `false` if absent; include in dry-run summary.
 
-## Workflow
+### Dry-run summary
 
-### 1. Pre-flight Checks
+Print execution order, team, and `Validator E2E Capture: enabled/disabled` before running. Wait for confirmation.
 
-If no PATH_TO_PLAN is provided, stop and ask for it.
+### Per-task execution sequence
 
-**File check:** Verify the plan file exists at PATH_TO_PLAN. If not, stop and tell the user.
+For each task, in dependency order:
 
-**Agent type check:** Parse the plan's `## Team Orchestration / Team Members` section. For each
-listed Agent Type, check that a matching `.md` file exists in `{{discovery.agent_dir}}/agents/team/`. List any
-missing agent types and stop — do not proceed until they exist or the plan is updated.
+1. **Before dispatch:** capture `<before-sha>` with `git rev-parse --short HEAD`. If `beads_tickets`: run `br update <ticket-id> --status=in_progress`; include `br show` output in builder prompt under `## Beads Context`. If the task implements specs written by a prior test-writing task, list those spec file paths in the builder's prompt as the **expected-red baseline** — the builder must not block on them failing before implementation.
+2. **After builder done:** run a spec compliance reviewer subagent: provide the task spec text and the diff since `<before-sha>`; ask it to return `✅ COMPLIANT` or `❌` with specific gaps.
+3. **If ❌:** dispatch the builder again with the gap list. Re-run the spec reviewer. If it fails a second time, escalate to the user — do not retry further.
+4. **After ✅ (if `beads_tickets`):** `br close <ticket-id> --reason="Completed in build"`.
+5. **After failure (if `beads_tickets`):** leave ticket `in_progress`; record `br comment <ticket-id> "Task failed: <summary>"`.
 
-**Task ID check:** Parse all task IDs from the `## Step by Step Tasks` section. Verify each ID matches `[a-z0-9-]+` (kebab-case alphanumeric). Verify all IDs are unique. If any ID is malformed or duplicated, report it and stop.
+If `deep_discovery` is enabled, read `docs/modules/ROUTING.md` before each builder dispatch and include the relevant module doc instruction in the builder's prompt.
 
-**Dependency check:** Parse the `## Step by Step Tasks` section. Build the dependency graph from
-`Depends On` fields. Check for cycles. If any task depends on a task ID that doesn't exist in the
-plan, report it and stop.
-
-**Test requirements check:** Parse the `## Test Requirements` section. Verify it exists and lists at least one required test. If the section is missing, warn the user: "This plan has no Test Requirements section. Tests should be defined before building. Continue anyway?" Wait for confirmation.
-
-### 2. Dry-Run Summary
-
-Print a summary for the user to review before anything runs:
-
-```
-Plan: PATH_TO_PLAN
-Complexity: <from plan>
-
-Tasks (in execution order):
-  1. <task-id> — <assigned-to> [parallel]
-  2. <task-id> — <assigned-to> [sequential, depends on: task-id]
-  ...
-  N-1. run-tests — <builder> [sequential]
-  N.   validate-all — validator [sequential]
-
-Team:
-  - <name> (<agent-type>) — <role>
-
-Proceed? (yes to continue)
-```
-
-Wait for confirmation before dispatching any agents.
-
-### 3. Execute
-
-Read and execute the plan at PATH_TO_PLAN. Create all tasks via TaskCreate before deploying
-any agents. Follow the orchestration workflow defined in the plan.
-
-{{#if discovery.features.deep_discovery}}
-**Module doc consultation:** Before dispatching each builder task, read `docs/modules/ROUTING.md` to check which module docs cover the files the task will modify. Include instructions in the builder's prompt to read the relevant module docs and follow documented patterns. After task completion, if the builder changed behavior described in a module doc, flag it for `/discovery --module <name>` refresh.
-{{/if}}
-
-For full documentation of task management tools, see `orchestration-reference.md`.
-
-### 3a. Error Recovery
-
-When a deployed agent fails or reports an error:
-
-1. **Read the output** — understand the failure from the agent's report or TaskOutput.
-
-2. **Classify the failure** using these heuristics:
-   - **Clearly fixable** — the error message includes a specific file and line number, AND the fix is obvious from context:
-     - Missing import or wrong import path
-     - Typo in variable/function name
-     - Type mismatch with a clear expected vs. actual
-     - Test assertion off by a small amount
-     - Linter error with auto-fix available
-     Resume the agent ONCE with specific fix guidance.
-     Example: `Task({ resume: agentId, prompt: "The import path should be ../utils not ./utils. Fix and re-run tests." })`
-   - **Ambiguous or structural** — escalate to user without retrying:
-     - Error message is vague ("Something went wrong", "Internal error")
-     - Fix requires changing architecture or design approach
-     - Failure is in code the agent did not write (pre-existing test breaking)
-     - Missing external dependency or service
-     - Multiple cascading errors suggesting a wrong approach
-     DO NOT retry. Present to the user with full context:
-     ```
-     Task [task-id] failed.
-     Agent: [name]
-     Error: [summary of what went wrong]
-     Output: [relevant portion]
-
-     Options:
-     1. Retry with guidance: [suggest what to tell the agent]
-     2. Skip this task and continue
-     3. Abort the build
-     ```
-     Wait for the user's choice.
-
-3. **Task state management:**
-   - Failed tasks remain `in_progress` (not completed, not deleted)
-   - Downstream tasks that depend on a failed task stay `blocked`
-   - If the user chooses to skip, mark the task `completed` with a note: "Skipped by user after failure"
-   - If the user chooses to abort, report all task statuses and stop
-
-4. **Single retry limit:** Never resume the same agent more than once for the same failure.
-   If the retry also fails, escalate to the user regardless of failure type.
-
-5. **Timeout handling:** If `TaskOutput` times out (no response within the timeout window):
-   - Check `TaskList` to see if the task is still `in_progress` (agent may still be running).
-   - If still `in_progress`: wait and retry `TaskOutput` with a longer timeout (once).
-   - If the second attempt also times out: escalate to the user with the task's current state.
-
-6. **Validator caveats:** When a validator returns PASS but with CANNOT VERIFY items:
-   - Display the caveats to the user.
-   - If the user confirms, mark the task complete.
-   - If the user wants to review, keep the task `in_progress`.
-
-### 4. Completion Report
-
-Once all tasks are complete, verify test requirements and present a build summary:
-
-**Test verification procedure:**
-1. Parse the plan's `## Test Requirements / Required tests` checklist
-2. For each listed test, search the codebase for a matching test function (by name or description in `it()`/`test()`/`#[test]` blocks)
-3. Run the test suite and map results back to the required tests list
+### Completion report
 
 ```
 ## Build Complete
 Plan: [path]
 Tasks completed: [N]
-Validator final status: [PASS / FAIL]
+Validator E2E Capture: enabled | disabled
+Validator final status: PASS | FAIL
 
 ## Test Requirements Status
 Required tests: [N defined in plan]
 Tests passing: [N/N]
-Tests failing: [list with failure reason]
-Missing tests: [list any required tests not found in codebase]
+Tests failing: [list]
+Missing tests: [list]
+
+## Beads Ticket Status   ← beads_tickets only
+[ticket-id] [task-id] — closed / failed / skipped
+
+Next: /ship <plan-path>
 ```
 
-If any required tests are missing or failing, the spec is not considered complete.
-```
+If any required tests are missing or failing, flag it prominently — the spec is not considered complete.
+
+When `beads_tickets` is enabled, run `br sync --flush-only` after printing the report.
 
 ---
 
-## `/review` — Parallel Domain-Specialist Code Review
+## `/ship` — Archive Plan, Push, Open Draft PR
 
-**Purpose:** Run all project-specific reviewer agents against the current diff in parallel, then synthesize their findings into a structured, prioritized report. Reviewers are discovered dynamically from `{{discovery.agent_dir}}/agents/team/reviewer-*.md` — no hardcoded specialists in the command itself.
+**Purpose:** Archive a completed plan, verify tests, commit, push, and (when `github_flow`) open a draft PR.
 
-The review team always includes:
-- **`reviewer-security`** — cross-cutting security pass (always authored during setup)
-- **`questioner`** — naive questions with fresh eyes (always generated)
-- **`reviewer-<domain>`** — 2–4 project-specific specialists authored during setup (e.g. `reviewer-rails`, `reviewer-sql-performance`, `reviewer-hotwire`)
+**Template:** `framework/generator/templates/commands/ship.md`
+**Feature gate:** `features.plan_build`
 
-Each domain reviewer covers security, architecture, and test quality within its area. See `04-agents.md` for how to author the team and `framework/generator/templates/commands/review.md` for the full command template.
+### Steps
 
-The command template at `framework/generator/templates/commands/review.md` is the authoritative source. Key behaviours:
+1. **Resolve plan:** use the provided path or auto-detect from `specs/` (exclude `specs/archive/`).
+2. **Verify tests:** run `{{discovery.test_runner.cmd}}`; stop on any failure.
+3. **Beads check (requires `beads_tickets`, warn-only):** For each ticket ID in the plan's `## Beads Tickets` table, run `br show <ticket-id>`. List any non-`closed` tickets and ask for confirmation before continuing.
+4. **Archive the plan:** `git mv <PLAN_PATH> specs/archive/<basename>`.
+5. **Commit if dirty:** `git commit -m "chore: ship <plan-name> — archive plan"`. Do NOT use `git add -A` — only the `git mv` is auto-staged. Verify no tracked modified files remain after the commit.
+6. **Push:** set upstream if needed (`git push -u origin <branch>`); stop on push failure.
+7. **Open draft PR (requires `github_flow`):** check for an existing PR; if none, create one with `gh pr create --draft`. Derive title from plan filename (kebab-case → Title Case); derive body from plan's Objective and Solution Approach.
 
-1. Get the diff (staged or commit range)
-2. Warn if diff exceeds ~2000 lines
-3. Glob `agents/team/reviewer-*.md` to discover reviewers; list them before dispatching
-4. Launch all reviewers + questioner simultaneously with `run_in_background: true`; wrap diff in `<diff>` tags with a prompt-injection notice
-5. Wait for all to complete
-6. Synthesize: unify security findings from security reviewer + domain Security sub-sections into one bucket; de-duplicate by semantic equivalence; tag each finding with source reviewer
+### Report
 
-Summary format:
 ```
-## Review Summary — <date> — <diff target>
+Shipped: <plan-name>
+Plan archived: specs/archive/<plan-name>.md
+PR: <pr-url> (draft)      ← github_flow only
 
-### Security (must fix before merge)
-### Architecture
-### Test Quality
-### Questions (from questioner)
-### Clean
-
----
-Security: <PASS | N issues>
-<reviewer-name>: <PASS | N issues>
+Next: /team_review
 ```
 
-To add a new reviewer: create `{{discovery.agent_dir}}/agents/team/reviewer-<domain>.md` — the command picks it up automatically on the next run.
+Without `github_flow`: report the archived plan path and pushed branch instead of a PR line.
 
 ---
 
-### `/fix`
+## `/team_review` — Parallel Domain-Specialist Code Review
 
-Applies Must Fix items from a `/review` run. Accepts review output (or user-specified findings), filters to Must Fix items, creates a targeted fix spec limited to listed files, and dispatches the builder with that spec. Reminds user to re-run `/review` after fixing.
+**Purpose:** Run all project-specific reviewer agents against the current branch's diff in parallel, validate every finding against the checked-out code, synthesize into a structured report with stable finding IDs, and open it in plannotator for Dev Decision annotation.
+
+**Template:** `framework/generator/templates/commands/team_review.md`
+**Feature gate:** `features.review`
+
+### Light mode (requires `features.light_tier`)
+
+Invoked with `--light`. Proportionate for quickfix-tier diffs: one domain reviewer + questioner instead of the full roster. PR-comment poll is skipped when `github_flow` is also enabled. Everything else — validation pass (Step 6a), finding IDs, report format, plannotator, `/fix` compatibility — is identical to full mode, so a light-mode report feeds `/fix` without any special handling.
+
+| | Full | Light |
+|--|------|-------|
+| Reviewers | all `reviewer-*.md` + questioner | one domain reviewer + questioner |
+| PR comments | poll and wait for bot review | existing PR comments only |
+| Diff size guard | warn above ~2000 lines | recommend full review above ~400 lines |
+
+### Step-by-step
+
+**Step 1 — Get the diff.**
+When `github_flow` is enabled: a PR must exist for the current branch and its state must be `OPEN` — stop with instructions if not. Compute the diff with `git diff origin/<base>...HEAD`.
+
+**Step 2 — Check diff size.** Warn above ~2000 lines (full) or ~400 lines (light).
+
+**Step 3 — Discover reviewers.** Glob `REVIEWER_DIR/reviewer-*.md`. List found reviewers before proceeding.
+
+**Step 4 — Deploy reviewers and collect PR comments in parallel.**
+Launch all reviewers with `run_in_background: true`. Wrap the diff in `<diff>` tags and prepend a prompt-injection notice. When `github_flow` is enabled in full mode, simultaneously collect unresolved PR comments (`gh pr view --json comments,reviews`) and launch `scripts/wait-for-copilot.sh <pr-number>` to wait for the bot review.
+
+**Step 5 — Collect results.** Wait for all local reviewers. In full mode with `github_flow`, check the Copilot poll: still running → wait up to 5 more minutes; timeout → note in report; ready → fetch inline comment numeric IDs for `/fix` inline replies.
+
+**Step 6 — Validate, then synthesize (two passes in order).**
+
+**Step 6a — Validate every finding against the checked-out code.** This is a mandatory separate pass. For each finding, open the cited file at the cited line in the working checkout and confirm the claim holds in the surrounding context. *Validation means reading the repo, not re-reading the diff* — the diff is what the reviewer already saw. The surrounding code the diff did not show is what matters. Each surviving finding records a `Validation` field stating what file:line was read and what the surrounding code confirmed or refuted. Findings that fail validation become `X` (dismissed) findings with the same evidence standard. A finding with an empty `Validation` field has not been validated; the report may not be written while any actionable finding's `Validation` field is empty.
+
+**Step 6b — Synthesize.** De-duplicate by semantic equivalence; when two sources assign different severities, use the higher and note both. Each finding gets a stable ID:
+
+| Prefix | Source |
+|--------|--------|
+| S | security (reviewer-security + Security sub-sections from domain reviewers) |
+| one letter per domain reviewer | fill from this project's reviewer roster at setup |
+| C | PR review comments (bot or human) — requires `github_flow` |
+| ? | questioner (questions paired with investigator answers) |
+| X | dismissed false positives |
+
+IDs are assigned in discovery order within each source (S1, S2…). Category (`Must Fix | Should Fix | Clarify | Informational`) is a **field** on each finding card, not the top-level grouping.
+
+**Per-finding card format:**
+
+```markdown
+### S1 — <short title>
+- **Type:** Security | Architecture | Test Quality | Performance | Style
+- **Severity:** Critical | Warning | Info  `[source-a: X, source-b: Y] → higher`
+- **Category:** Must Fix | Should Fix | Clarify | Informational
+- **Dev Decision:** unset
+- **Source:** <reviewer IDs>
+- **File:** `path/to/file:line`
+- **PR comment ID:** <id>   ← C findings with inline comment origin only; github_flow
+- **Validation:** <file:line read in checkout + what surrounding code confirmed or refuted>
+
+**Finding:** 1-2 sentence description.
+
+**Options:** (only if identified)
+**Recommendation:** (only if options exist)
+```
+
+The `Dev Decision` field starts as `unset`. Valid values after plannotator annotation: `fix | defer | dismiss`. For `Clarify` findings marked `fix`, the dev also records `**Chosen option:**`. Questioner (`?`) and dismissed (`X`) findings have no `Dev Decision` field.
+
+**Step 7 — Write report and open in plannotator.**
+
+Precondition gate: every actionable finding must have a non-empty `Validation` field. Return to 6a if any are empty.
+
+7a. Write to `.reviews/<YYYY-MM-DD-HHMM>-<branch-slug>[-pr<number>].md`. Create `.reviews/` if needed.
+
+7b. Invoke `/plannotator-annotate <report-path>` for Dev Decision annotation. After it returns, proceed to 7c.
+
+7c. Print the report path and `Next: /fix .reviews/<filename>` prominently at top and bottom.
+
+---
+
+## `/fix` — Apply Dev Decision Findings
+
+**Purpose:** Parse a `/team_review` report for findings marked `Dev Decision: fix`, dispatch the builder to apply them, append Resolutions to the report, and (when `github_flow`) push and post PR comments.
 
 **Template:** `framework/generator/templates/commands/fix.md`
 **Feature gate:** `features.review`
+
+### Steps
+
+**Step 1 — Load report.** `REPORT_PATH` is required (the path to a `.reviews/...md` file). Do not accept raw-pasted review text.
+
+**Step 2 — Parse Dev Decisions.** Collect all finding cards where `Dev Decision: fix`. Match the field in the card's metadata bullet list only (not body prose or code blocks). If scope is empty, stop with instructions to annotate first. For `Clarify` findings, verify a `Chosen option:` line is present or stop.
+
+**Step 3 — Confirm scope.** Print the fix list; wait for confirmation.
+
+**Step 4 — Dispatch builder.** Provide the full finding cards verbatim, scope restriction ("only files mentioned in these cards"), test and lint instructions, and instruction to make a single atomic commit for all fixes in scope. If a fix breaks tests, the builder marks it `❌` and continues rather than aborting.
+
+**Step 5 — Append Resolutions.** Get the current short SHA. Append `## Resolutions` to the report file (not committed by `/fix`):
+
+```markdown
+## Resolutions
+- S1 ✅ <sha> — <one-line description>
+- R1 ⏭ deferred — <reason>
+- H2 ❌ failed — <reason>
+```
+
+**Step 5.5 — Auto-push (requires `github_flow`).** Push before posting PR comments so referenced SHAs are reachable on the remote. If `git push` fails, stop — do not post comments. The local state at this point: builder commit exists, Resolutions appended (uncommitted), PR not notified. Recover manually.
+
+**Step 6 — Post PR comments (requires `github_flow`).**
+
+6a. For each finding with a `PR comment ID:` field, post an inline reply on that comment thread — even deferred/failed findings get a reply so threads are resolved.
+
+6b. Post a new summary comment every time (do not update existing ones — each `/fix` run preserves history).
+
+**Step 7 — Report results.**
+
+```
+## Fix Results
+Applied:   S1: <what changed> (<file>)
+Deferred:  A1: <reason>
+Failed:    H2: <reason>
+
+Report updated: <REPORT_PATH>
+PR comment: <url>   ← github_flow only
+Tests: X/X passed
+
+Next: /finish
+```
+
+---
+
+## `/quickfix` — Light-Tier TDD Fix
+
+**Purpose:** Fix a small, decision-free bug through the light tier. No plan file, no plan-adversary, no task graph. One Beads ticket (when `beads_tickets`), one TDD builder dispatch, a proportionate review.
+
+**Template:** `framework/generator/templates/commands/quickfix.md`
+**Feature gate:** `features.light_tier`
+
+**Tier decision rule:** The heavy path (`/plan_w_team` → `/build`) exists for work with open design decisions. `/quickfix` exists for work where the fix is forced — the correct behavior is already specified by an existing test, the ticket, or obviously-intended behavior.
+
+### Tier criteria
+
+A change qualifies only when ALL hold:
+
+**Judgment rule (the real gate):** there are no consequential decisions left to make — the fix is forced.
+
+**Mechanical proxies:**
+- Touches ≤ 3 files, excluding tests
+- No schema or data migration
+- No new route/endpoint, no authorization/permission change, no new dependency
+- Restores intended behavior or is trivially additive — does not change a documented contract
+
+> Setup note: tailor the proxies to this project's risk surface during authoring (e.g. for a Rails app: "no migration, no new route, no policy/role change").
+
+If any proxy fails, or the judgment rule fails, stop and direct the user to `/plan_w_team`.
+
+### Steps
+
+**Step 1 — Resolve input.** If `beads_tickets`: resolve a ticket ID or use free-text as bug description.
+
+**Step 2 — Investigate and gate.** Explore the codebase (no subagents) to localize the bug. Print an explicit tier check — every line, every time:
+
+```
+Tier check:
+  Estimated files: <N> (<paths>)
+  Migration: <yes/no>
+  New route / auth change / dependency: <yes/no>
+  Contract change: <yes/no>
+  Open decisions: <none — expected behavior specified by <source>, or list them>
+→ Qualifies for quickfix.  |  → Does NOT qualify: <failing criterion>
+```
+
+**Step 3 — Branch check.** If on the default branch, create and switch to `fix/<kebab-slug>`.
+
+**Step 4 — Beads ticket (requires `beads_tickets`).** Create or update-to-`in_progress` a ticket for the bug.
+
+**Step 5 — Dispatch builder.** TDD instruction: "RED first — write a failing test that reproduces the bug and confirm it fails for the expected reason. Then GREEN — the minimal fix. Then REFACTOR." Scope restriction to the files from the tier check. Commit instruction: single atomic commit `fix: <summary> (<ticket-id>)`. Escalation instruction: if the builder encounters a decision the ticket doesn't answer, STOP — commit the failing test alone (`test: failing test for <bug> — escalated`) and report via TaskUpdate.
+
+**Step 6 — Escalation path.** If the builder stops on a discovered decision, this is the tier system working — not a failure. Leave the ticket `in_progress` (with a comment recording the discovered decision). Confirm the failing test is committed. Print:
+
+```
+Escalated — this fix has an open decision: <decision>.
+The failing test at <test path> carries forward as the plan's first test requirement.
+
+Next: /plan_w_team "<original bug description> — see ticket <id>; failing test at <test path>"
+```
+
+**Step 7 — Verify.** Run `{{discovery.test_runner.cmd}}`. All tests must pass. If any fail, resume the builder once with specific guidance if the failure is clearly fixable; otherwise escalate to the user. Never resume more than once for the same failure.
+
+**Step 8 — Close and sync (requires `beads_tickets`).** `br close <id>` and `br sync --flush-only`. Stage and commit the beads export if it changed.
+
+**Step 9 — Report.**
+
+```
+## Quickfix Complete
+Ticket: <id> — closed    ← beads_tickets only
+Branch: <branch>
+Files changed: <file — what changed>
+Tests: X/X passed
+Commit: <sha>
+
+Review: open a draft PR via /finish, then run /team_review --light.
+Next: /finish
+```
+
+---
+
+## `/finish` — Finish a Development Branch
+
+**Purpose:** Verify tests, present completion options (merge locally, flip PR to ready, keep as-is, discard), execute the chosen option, and clean up worktrees.
+
+**Template:** `framework/generator/templates/commands/finish.md`
+**Feature gate:** `features.plan_build`
+
+### Steps
+
+1. **Verify tests:** run `{{discovery.test_runner.cmd}}`; stop on failure.
+2. **Determine base branch** via `git merge-base`.
+3. **Present options** (exactly four — no elaboration):
+
+```
+Tests pass. What would you like to do?
+
+1. Merge back to <base-branch> locally
+2. Flip draft PR to ready-for-review    ← github_flow only
+3. Keep the branch as-is (I'll handle it later)
+4. Discard this work
+```
+
+4. **Execute choice:**
+   - Option 1: checkout base, pull, merge, re-run tests, delete feature branch.
+   - Option 2 (requires `github_flow`): find the PR; if not found or already ready, report and stop; otherwise `gh pr ready <pr-number>`.
+   - Option 3: keep everything.
+   - Option 4: confirm with exact word "discard", then delete the branch.
+5. **Clean up worktree** (for Options 1, 2, 4): `git worktree remove <path>` if the feature branch had an associated worktree.
 
 ---
 
 ## `/verify-browser` — Playwright CLI UI Verification
 
-**Purpose:** Inspect recent git commits, build a verification checklist of user-visible changes, then use `playwright-cli` (https://github.com/microsoft/playwright-cli) to walk through it. Uses the CLI tool, not the Playwright MCP — the CLI is more token-efficient for coding agents.
+**Purpose:** Inspect recent git commits, build a verification checklist of user-visible changes, then use `playwright-cli` to walk through it.
 
 **Template:** `framework/generator/templates/commands/verify-browser.md`
 
@@ -905,4 +776,3 @@ For specs classified as "Built & Complete":
 
 Do NOT auto-delete anything that isn't clearly temporary. Flag MEDIUM risk for human review.
 ```
-

@@ -22,7 +22,7 @@ TEAM_MEMBERS: `{{discovery.agent_dir}}/agents/team/*.md`
 
 If `$ARGUMENTS` contains ` --- ` (space-dash-dash-dash-space), treat everything before it as USER_PROMPT and everything after as ORCHESTRATION_PROMPT. Otherwise, treat the full `$ARGUMENTS` as USER_PROMPT and leave ORCHESTRATION_PROMPT empty. If USER_PROMPT is empty after parsing, stop and ask the user to provide a feature description.
 
-- **PLANNING ONLY**: Do NOT build, write code, or deploy agents. Output is a plan document saved to PLAN_OUTPUT_DIRECTORY.
+- **PLANNING ONLY**: Do NOT build, write code, or modify the codebase. Output is a plan document saved to PLAN_OUTPUT_DIRECTORY.{{#if discovery.features.plan_adversary}} The only agent you may deploy is the adversarial reviewer in step 7a — and only to review the plan, never to build.{{/if}}
 - If no USER_PROMPT is provided, stop and ask the user to provide it.
 - If ORCHESTRATION_PROMPT is provided, use it to guide team composition, task granularity, dependency structure, and parallel/sequential decisions.
 - Determine the task type (chore|feature|refactor|fix|enhancement) and complexity (simple|medium|complex).
@@ -52,8 +52,21 @@ PLANNING ONLY — do not execute, build, or deploy.
 4. Define team — identify needed agents from TEAM_MEMBERS or use general-purpose
 5. Define tasks — write out steps with IDs, dependencies, assignments
 6. Generate filename — descriptive kebab-case
-7. Save plan — write to PLAN_OUTPUT_DIRECTORY/<filename>.md
-8. Report — summarize per the Report section below
+7. Save plan — write to PLAN_OUTPUT_DIRECTORY/<filename>.md{{#if discovery.features.beads_tickets}} (Beads Ticket fields left as `TBD`){{/if}}
+{{#if discovery.features.plan_adversary}}
+7a. **Adversarial review** — dispatch the `plan-adversary` agent (foreground) to stress-test the saved plan{{#if discovery.features.beads_tickets}} before tickets are created{{/if}}. Brief it with the plan file path and the user's original request; the agent's own definition handles methodology. The agent will return a structured report of decision gaps tagged `critical | important | nice-to-have`.
+7b. **Incorporate findings** — read the adversarial report and update the plan in place:
+    - For each `critical` or `important` finding: either add coverage to the plan (new acceptance criteria, new test, new task with dependencies wired in, expanded Test Requirements) or document it under `## Edge Cases & Risks` with an explicit accept/defer decision and reason. Do not silently drop findings.
+    - `nice-to-have` findings can be listed under `## Edge Cases & Risks` as deferred without further action.
+    - If new tasks were added, renumber the Step by Step Tasks section so IDs remain unique and dependencies still resolve.
+{{/if}}
+{{#if discovery.features.beads_tickets}}
+8. Create Beads tickets — one `br create` per task in Step by Step Tasks; set deps with `br dep add`; reference the plan path in each description. Capture each returned ticket ID.
+8a. Update plan — go back and fill in every `**Beads Ticket**` field and the `## Beads Tickets` index table with the IDs captured in step 8.
+9. Sync beads — run `br sync --flush-only` after creating all tickets
+{{/if}}
+10. Annotate plan — invoke `/plannotator-annotate` to open the interactive annotation UI for the saved plan
+11. Report — summarize per the Report section below
 
 ## Plan Format
 
@@ -69,6 +82,14 @@ Non-placeholder text must appear exactly as written.
 
 ## Objective
 <what will be accomplished when this plan is complete>
+
+{{#if discovery.features.beads_tickets}}
+## Beads Tickets
+
+| Task ID | Beads Ticket | Title |
+|---------|--------------|-------|
+| <task-id> | <ticket-id> | <task title> |
+{{/if}}
 
 {{#if discovery.features.deep_discovery}}
 ## Module Docs Consulted
@@ -102,7 +123,8 @@ Task IDs must be kebab-case alphanumeric (`[a-z0-9-]+`). The `Depends On` field 
 
 ### 1. <Write Tests (Test-First)>
 - **Task ID**: <write-tests-kebab-case-id>
-- **Depends On**: none
+{{#if discovery.features.beads_tickets}}- **Beads Ticket**: <ticket-id> (filled in after `br create`)
+{{/if}}- **Depends On**: none
 - **Assigned To**: <team member name>
 - **Agent Type**: <agent type>
 - **Parallel**: <true|false>
@@ -111,7 +133,8 @@ Task IDs must be kebab-case alphanumeric (`[a-z0-9-]+`). The `Depends On` field 
 
 ### 2. <Implement Feature>
 - **Task ID**: <kebab-case-id>
-- **Depends On**: <write-tests-task-id>
+{{#if discovery.features.beads_tickets}}- **Beads Ticket**: <ticket-id> (filled in after `br create`)
+{{/if}}- **Depends On**: <write-tests-task-id>
 - **Assigned To**: <team member name>
 - **Agent Type**: <agent type>
 - **Parallel**: <true|false>
@@ -139,8 +162,24 @@ Task IDs must be kebab-case alphanumeric (`[a-z0-9-]+`). The `Depends On` field 
 
 ## Acceptance Criteria
 
+Use checkbox format. Each criterion must be specific and independently verifiable.
+
 - [ ] <criterion 1>
 - [ ] <criterion 2>
+
+## Validator Controls
+
+Set validator behavior for this plan. Keep E2E capture off unless reusable coverage is intentionally needed.
+
+```yaml
+validator_e2e_capture: false
+```
+
+{{#if discovery.features.plan_adversary}}
+## Edge Cases & Risks
+
+<adversarial-review findings that were accepted or deferred rather than folded into tasks, each with an explicit decision and reason>
+{{/if}}
 
 ## Test Requirements
 
@@ -174,7 +213,7 @@ Specs are not complete until their tests pass. Define what tests must exist.
 
 ## Report
 
-After saving the plan, summarize:
+After saving the plan{{#if discovery.features.beads_tickets}} and creating Beads tickets{{/if}}, summarize:
 
 ```
 Plan created: PLAN_OUTPUT_DIRECTORY/<filename>.md
@@ -182,7 +221,7 @@ Topic: <what it covers>
 Complexity: <simple|medium|complex>
 
 Tasks:
-- <task id> — <owner> (<parallel|sequential>)
+- <task id> — <owner> (<parallel|sequential>){{#if discovery.features.beads_tickets}} [Beads: <ticket-id>]{{/if}}
 - ...
 
 Team:

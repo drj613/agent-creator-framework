@@ -104,6 +104,16 @@ fi
 generate_validators
 generate_hooks
 generate_agents
+
+# Static scripts — copied as-is when their feature is enabled
+if [[ "$(jq -r '.features.github_flow // "false"' <<< "$DISCOVERY_JSON")" == "true" ]]; then
+  if [[ "$DRY_RUN" != "true" ]]; then
+    mkdir -p "${PROJECT_DIR}/${agent_dir}/scripts"
+  fi
+  write_file "${PROJECT_DIR}/${agent_dir}/scripts/wait-for-copilot.sh" \
+    "$(cat "$SCRIPT_DIR/templates/scripts/wait-for-copilot.sh")"
+fi
+
 generate_gitignore_entries
 
 # --- Validate output ---
